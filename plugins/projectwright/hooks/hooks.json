@@ -1,0 +1,71 @@
+{
+  "description": "projectwright: lint the wiki after every write; at the start of a session check the plugin setup and give Claude the user's working profile and the dashboard; keep board.html up to date.",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/scripts/wiki-lint.py",
+              "--hook"
+            ]
+          },
+          {
+            "type": "command",
+            "command": "python3",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/scripts/board.py",
+              "--hook"
+            ]
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/scripts/framework.py",
+              "check",
+              "--hook"
+            ]
+          },
+          {
+            "type": "command",
+            "command": "python3",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/scripts/profile.py",
+              "show",
+              "--hook"
+            ]
+          },
+          {
+            "type": "command",
+            "command": "python3",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/scripts/wiki-query.py",
+              "dashboard",
+              "--format",
+              "md",
+              "--hook"
+            ]
+          },
+          {
+            "type": "command",
+            "command": "python3",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/scripts/board.py",
+              "--hook"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,33 @@
+# Product code: separate repositories, never part of this repo
+repositories/
+
+# Claude Code: personal settings only (the rest of .claude/ IS versioned)
+.claude/settings.local.json
+CLAUDE.local.md
+
+# OS / editors
+Thumbs.db
+Desktop.ini
+.DS_Store
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+
+# Obsidian: local state only (the shared configuration IS versioned)
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+
+# Local script caches
+.cache/
+
+# Generated view of the wiki (scripts/board.py): never versioned
+board.html
+
+# Original copy of the framework files, kept locally as the base of framework.py diff
+.claude/.projectwright-original/
+
+# Path of the plugin running on this machine, written at every session start (read by the git hook)
+.claude/.projectwright-plugin

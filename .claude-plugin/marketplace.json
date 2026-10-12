@@ -1,0 +1,17 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "projectwright",
+  "description": "The projectwright framework: a project wiki as the AI's memory, knowledge-cycle skills, checks and a project board for Claude Code.",
+  "owner": {
+    "name": "projectwright contributors"
+  },
+  "plugins": [
+    {
+      "name": "projectwright",
+      "source": "./plugins/projectwright",
+      "description": "The projectwright method: a project wiki as the AI's memory, knowledge-cycle skills, checks, templates and a project board.",
+      "category": "productivity",
+      "tags": ["wiki", "project-management", "knowledge-base", "documentation"]
+    }
+  ]
+}

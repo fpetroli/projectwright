@@ -1,0 +1,18 @@
+{
+  "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
+  "name": "projectwright",
+  "version": "0.1.0",
+  "description": "The projectwright method: a project wiki as the AI's memory, knowledge-cycle skills, checks, templates and a project board. Install it for a project, or copy it into the project to adapt it.",
+  "author": {
+    "name": "projectwright contributors"
+  },
+  "license": "MIT",
+  "repository": "https://github.com/fpetroli/projectwright",
+  "keywords": [
+    "wiki",
+    "project-management",
+    "knowledge-base",
+    "adr",
+    "documentation"
+  ]
+}

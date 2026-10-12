@@ -1,0 +1,23 @@
+#!/bin/sh
+# projectwright: check the wiki before every commit (activated with
+# `git config core.hooksPath .githooks`). Blocks the commit on violations.
+# The plugin is the copy in the project, or the installed one whose path the
+# start of every Claude Code session records in .claude/.projectwright-plugin.
+# The script itself switches to Python >= 3.11 when the first one found is older.
+root="$(git rev-parse --show-toplevel)"
+plugin="$root/.claude/skills/projectwright"
+if [ ! -d "$plugin" ] && [ -f "$root/.claude/.projectwright-plugin" ]; then
+  plugin="$(head -n 1 "$root/.claude/.projectwright-plugin" | tr -d '\r')"
+fi
+script="$plugin/scripts/wiki-lint.py"
+if [ ! -f "$script" ]; then
+  echo "projectwright: plugin not found, the wiki was not checked (start Claude Code in the project once)" >&2
+  exit 0
+fi
+for py in python3 python; do
+  if command -v "$py" >/dev/null 2>&1; then
+    exec "$py" "$script" --root "$root"
+  fi
+done
+echo "projectwright: Python not found, the wiki was not checked" >&2
+exit 0

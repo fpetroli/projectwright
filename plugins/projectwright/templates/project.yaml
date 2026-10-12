@@ -1,0 +1,69 @@
+# Configuration of the project: the only place for everything that varies from
+# project to project. Skills, scripts and hooks read it; the root CLAUDE.md
+# imports it. It is written by /projectwright:setup-project and
+# /projectwright:add-repository; to change a choice later use
+# /projectwright:change-setting, which brings the content in line and records
+# the reason in an ADR-MET. The allowed values are in the method schema
+# (schema.yaml of the projectwright plugin).
+
+framework:
+  version: "{{framework_version}}"     # version of projectwright applied to the project
+
+project:
+  name: "{{project_name}}"
+  language: "{{language}}"            # language of the content written in the wiki (e.g. en, it)
+
+paths:
+  repositories: repositories          # code repositories (the product), relative to the project root
+  official_docs: docs                 # folder of the official documentation: docs/ in the project (its
+                                      # structure is yours), or a shared folder outside it
+  utils: utils                        # files the user asks Claude to create (versioned), relative to the project root
+  other_sources: {}                   # other local sources, e.g. design exports: {name: path}
+
+wiki:
+  optional_modules: []              # optional wiki folders: add domain, architecture when there are two or more components
+  areas:                              # area codes of cross-cutting records -> label
+    PRJ: project
+    MET: method
+    DOM: domain
+    ARCH: architecture
+    STD: standards
+    INT: inter-stream
+
+components: []                        # one entry per repository, managed by /projectwright:add-repository
+#  - name: web-portal
+#    code: FE                         # unique, 2-8 capital letters; prefix of its ADRs, questions, tasks
+#    repository: web-portal           # folder name in repositories/
+#    url: https://git.example/web-portal.git
+#    tracker_component: null          # component or label in the tracker, if any
+
+sources:
+  categories: [minutes, technical-docs, functional-docs]   # kinds of documents: the folders of the cards in wiki-sources/
+  exclude: []                         # glob patterns of paths (relative to official_docs) never ingested
+
+tasks:
+  mode: wiki                          # tracker | wiki
+
+tracker:                              # used only when tasks.mode = tracker
+  type: null                          # jira | gitlab | github
+  project: null                       # project key in the tracker
+  client_visible: true                # the client can read the tracker
+  write_mode: propose                 # propose | auto (auto is forbidden when client_visible is true)
+  reconcile_every_days: 7             # reminder in the dashboard; 0 = no reminder
+
+drafting:                             # read by /projectwright:draft-minutes and /projectwright:propose-docs
+  forbidden: [person-names, economics, opinions]
+  self_contained: true
+  minutes:
+    filename: "{date} - {title} - {participants}"
+    allowed_participants: [Internal]
+  technical_docs:
+    suffixes: []
+
+git:                                  # the rest of the workflow (branches, merge requests, review): wiki/project/development-workflow.md
+  main_branch: main                   # reference branch for safe IDs
+  committed_by: human                 # commits and pushes are run by people
+  convention: conventional-commits
+  scope_required: true
+
+dev_skills: []                        # development skills of the project (folders in .claude/skills/)

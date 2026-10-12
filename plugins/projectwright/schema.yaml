@@ -1,0 +1,96 @@
+# The method schema of projectwright.
+#
+# This file holds the values of the METHOD, the same for every project: the
+# record types, the allowed values of their fields, the required fields, the
+# format of the IDs, and the rules of project.yaml. Everything that varies from
+# project to project (areas, components, paths, languages) is in project.yaml.
+# The meaning of every value is explained in the constitution (wiki/README.md).
+#
+# Format (read by scripts/pwlib.py, used by wiki-lint.py and wiki-query.py):
+#
+#   values:     name -> list of allowed values. A frontmatter field with the
+#               same name must take one of them.
+#   dates:      fields that hold a date (YYYY-MM-DD) when they are filled.
+#   wikilinks:  fields whose values must be wikilinks ("[[name]]").
+#   types:      one entry per value of `type`:
+#                 required:   fields that must be present and not empty;
+#                 forbidden:  fields that must not appear;
+#                 values:     per-type restriction of a list of `values`;
+#                 id_prefix:  the TYPE part of the ID (<TYPE>-<CODE>-NNNN);
+#                 folder:     the folder name where records of this type live.
+#   ids:        the regular expressions of codes and IDs.
+#   project:    the rules of project.yaml:
+#                 required:   dotted keys that must be present and not empty;
+#                 values:     dotted key -> allowed values (for lists: each item).
+#
+# This file is provided by the framework. A project can change it (for example
+# to add a gate value), but every change is a deviation from the framework.
+
+schema_version: 1
+
+values:
+  type: [note, decision, question, task, source-card, dashboard, component]
+  status: [decided, assumed, hypothesis, conflicting, undecided, informational, superseded]
+  lifecycle: [open, closed]
+  gate: [red, orange, yellow]
+  progress: [todo, in-progress, blocked, done, cancelled]
+  priority: [high, medium, low]
+  component_status: [planned, active, retired]
+  source_kind: [event, reference]
+  upstream: [proposed, accepted, rejected]   # decisions marked framework_deviation: fate of the proposal to the framework
+
+dates: [created, updated, closed_on, ingested_on]
+
+wikilinks: [related, superseded_by, decision, decisions, questions, blocked_by]
+
+types:
+  note:
+    required: [title, type, status, area, created, updated]
+    values:
+      status: [decided, assumed, hypothesis, conflicting, undecided, informational]
+  dashboard:
+    required: [title, type, status, area, created, updated]
+    values:
+      status: [informational]
+  decision:
+    required: [title, type, status, area, created, updated, id]
+    values:
+      status: [decided, assumed, conflicting, superseded]
+    id_prefix: ADR
+    folder: decisions
+  question:
+    required: [title, type, status, area, created, updated, id, lifecycle, gate]
+    values:
+      status: [undecided, assumed, conflicting, decided]
+    id_prefix: Q
+    folder: questions
+  task:
+    required: [title, type, area, created, updated, id, progress]
+    forbidden: [status]
+    id_prefix: T
+    folder: tasks
+  source-card:
+    required: [title, type, status, area, created, updated, source, hash, ingested_on, source_kind]
+    values:
+      status: [informational]
+  component:
+    required: [title, type, status, area, created, updated, code, component_status, repository]
+
+ids:
+  code: "^[A-Z]{2,8}$"
+  id: "^(?P<prefix>[A-Z]+)-(?P<code>[A-Z]{2,8})-(?P<number>[0-9]{4})$"
+
+project:
+  required:
+    - framework.version
+    - project.name
+    - project.language
+    - paths.repositories
+    - wiki.areas
+    - tasks.mode
+    - git.main_branch
+    - git.convention
+  values:
+    tasks.mode: [tracker, wiki]
+    tracker.type: [jira, gitlab, github]
+    tracker.write_mode: [propose, auto]
