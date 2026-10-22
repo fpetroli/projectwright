@@ -40,34 +40,15 @@ def load_script(name, filename):
     return mod
 
 
-def body_of(text):
-    """The Markdown body of a file, without its frontmatter."""
-    if text.startswith("---"):
-        end = text.find("\n---", 3)
-        if end >= 0:
-            return text[end + 4:].lstrip("\n")
-    return text
-
-
-def plain(v):
-    if isinstance(v, (datetime.date, datetime.datetime)):
-        return v.isoformat()
-    if isinstance(v, list):
-        return [plain(x) for x in v]
-    if v is None or isinstance(v, (str, int, float, bool)):
-        return v
-    return str(v)
-
-
 def collect(root, project):
     query = load_script("wiki_query_mod", "wiki-query.py")
     records = []
     for r in query.records(root, project):
         text = (Path(root) / r["_path"]).read_text(encoding="utf-8", errors="replace")
-        rec = {"name": r["_name"], "path": r["_path"], "component": r["_component"], "body": body_of(text)}
+        rec = {"name": r["_name"], "path": r["_path"], "component": r["_component"], "body": pwlib.body_of(text)}
         for f in SCALAR_FIELDS:
             if f in r and r[f] not in (None, ""):
-                rec[f] = plain(r[f])
+                rec[f] = pwlib.plain(r[f])
         links = {}
         for f in LINK_FIELDS:
             names = pwlib.links_in(r.get(f))

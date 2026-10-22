@@ -1,0 +1,18 @@
+{
+  "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
+  "name": "projectwright-board",
+  "version": "0.2.0-dev",
+  "description": "The projectwright board beside the chat: the tasks of the project wiki in a pane that follows the wiki as it changes. Every change made from the pane goes through Claude. Needs the projectwright plugin of the same version.",
+  "author": {
+    "name": "projectwright contributors"
+  },
+  "license": "MIT",
+  "repository": "https://github.com/fpetroli/projectwright",
+  "keywords": [
+    "wiki",
+    "project-management",
+    "tasks",
+    "board"
+  ],
+  "types": "./types/index.d.ts"
+}

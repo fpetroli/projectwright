@@ -12,6 +12,13 @@
       "description": "The projectwright method: a project wiki as the AI's memory, knowledge-cycle skills, checks, templates and a project board.",
       "category": "productivity",
       "tags": ["wiki", "project-management", "knowledge-base", "documentation"]
+    },
+    {
+      "name": "projectwright-board",
+      "source": "./plugins/projectwright-board",
+      "description": "Optional: the projectwright board beside the chat, the tasks of the project wiki in a pane that follows the wiki. Needs the projectwright plugin of the same version.",
+      "category": "productivity",
+      "tags": ["wiki", "project-management", "tasks", "board"]
     }
   ]
 }

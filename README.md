@@ -233,12 +233,14 @@ All skills are invoked as `/projectwright:<name>`. You can also just ask in plai
 
 **The board** — `board.html`, in the project folder, is a read-only view of the whole project to open in your browser: overview, a **task board** in columns (to do, in progress, blocked, done) with filters, questions by traffic light, decisions, components, sources, full-text search and the detail of every record. It works offline and is never versioned. With `/projectwright:manage-tasks` it replaces an external tracker.
 
+**The board beside the chat (in development)** — `projectwright-board` is an optional second plugin of this marketplace: the tasks of the wiki in a pane beside the Claude Code chat, kept up to date as the wiki changes, with the detail of a task and forms to create and edit one. Every change made from the pane goes through Claude, which applies it with `/projectwright:manage-tasks` and the lint: the pane never writes the wiki. It needs `projectwright` of the same version and does not install it; install it with `claude plugin install projectwright-board@projectwright --scope project`, then type `/board`. It is built on an early-access API of Claude Code, and a session followed through Remote Control does not show the pane: `board.html` stays the full view. Details in [`plugins/projectwright-board/README.md`](plugins/projectwright-board/README.md).
+
 **Scripts** — in the `scripts/` folder of the plugin (its path is in `.claude/.projectwright-plugin` after the first session), plain Python with no dependencies to install. Claude and the hooks use them; you can too:
 
 | Script | What it does |
 |---|---|
 | `wiki-lint.py` | Mechanical checks: links, unique names, valid frontmatter, allowed values, IDs, components, configuration |
-| `wiki-query.py` | Queries the wiki: `dashboard`, `questions`, `decisions`, `tasks`, `sources`, `deviations` |
+| `wiki-query.py` | Queries the wiki: `dashboard`, `questions`, `decisions`, `tasks`, `task` (one task in full), `sources`, `deviations` |
 | `board.py` | Writes `board.html` (`--open` opens it) |
 | `ingestion-diff.py` | Compares the documentation with the ingestion log: what is new, changed, removed |
 | `scaffold.py` | Creates the structure of a project and of a component; `--git` versions the project folder |
@@ -294,8 +296,9 @@ A colleague who installs the plugin later gets the latest version: the start-of-
 
 | Path | Content |
 |---|---|
-| `.claude-plugin/marketplace.json` | Makes this repository a Claude Code plugin marketplace, listing the `projectwright` plugin |
+| `.claude-plugin/marketplace.json` | Makes this repository a Claude Code plugin marketplace, listing the `projectwright` and `projectwright-board` plugins |
 | `plugins/projectwright/` | The plugin: skills, hooks, scripts, schema, templates |
+| `plugins/projectwright-board/` | The optional board beside the chat, in development (see below) |
 | `plugins/projectwright/CHANGELOG.md` | Changes by version, with the upgrade notes for an existing project |
 
 To try a change to the plugin before publishing it, add your local clone as a marketplace (`claude plugin marketplace add ./projectwright --scope project` from a test project): a plugin from a local marketplace is loaded straight from its folder, so your edits apply at the next `/reload-plugins`. `claude plugin validate .` checks the marketplace and the plugin manifests.

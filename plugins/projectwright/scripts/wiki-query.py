@@ -6,6 +6,7 @@ Usage (from the project root, or with --root):
     python3 wiki-query.py questions [--lifecycle open] [--gate red] [--component FE] [--level project]
     python3 wiki-query.py decisions [--area ARCH] [--status decided] [--component FE]
     python3 wiki-query.py tasks     [--progress in-progress] [--phase sprint-1] [--component FE]
+    python3 wiki-query.py task <file name or ID>   (one task in full: fields, body, linked notes)
     python3 wiki-query.py sources   [--integrated no]
     python3 wiki-query.py deviations          (framework files changed in the project, and the
                                                ADRs marked framework_deviation that motivate them)
@@ -33,6 +34,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import pwlib  # noqa: E402
 
 RECENT_DECISIONS = 8
+
+
+class NotFound(Exception):
+    """The record asked for is not in the wiki."""
 
 
 def records(root, project):
@@ -145,6 +150,7 @@ Q_COLS = [("question", link), ("gate", "gate"), ("status", "status"), ("assumpti
 D_COLS = [("decision", link), ("status", "status"), ("area", "area"), ("updated", "updated")]
 T_COLS = [("task", link), ("progress", "progress"), ("priority", "priority"), ("phase", "phase"),
           ("assignee", "assignee")]
+T_JSON_COLS = T_COLS + [("title", "title")]  # JSON is read by programs: the title too
 S_COLS = [("document", "document"), ("card", "card"), ("ingested_on", "ingested_on"),
           ("result", "result"), ("integrated", "integrated")]
 
@@ -166,7 +172,33 @@ def cmd_decisions(root, project, args):
 def cmd_tasks(root, project, args):
     rows = select(records(root, project), project, "task", args)
     rows.sort(key=lambda r: r["_name"])
-    return render(rows, T_COLS, args.format)
+    return render(rows, T_JSON_COLS if args.format == "json" else T_COLS, args.format)
+
+
+def cmd_task(root, project, args):
+    """One task in full: every frontmatter field, its body and the notes it links."""
+    wanted = (args.name or "").strip().removeprefix("[[").removesuffix("]]")
+    if not wanted:
+        raise NotFound("task: name the task, by file name or ID (T-WEB-0004)")
+    found = [r for r in records(root, project)
+             if r.get("type") == "task" and wanted in (r["_name"], str(r.get("id")))]
+    if not found:
+        raise NotFound("task not found: %s" % wanted)
+    r = found[0]
+    _fm, _err, text = pwlib.read_frontmatter(Path(root) / r["_path"])
+    body = pwlib.body_of(text)
+    links = []
+    for value in [v for k, v in r.items() if not k.startswith("_")] + [body]:
+        links += [n for n in pwlib.links_in(value) if n not in links and n != r["_name"]]
+    fields = {k: pwlib.plain(v) for k, v in r.items() if not k.startswith("_")}
+    if args.format == "json":
+        detail = dict(fields, name=r["_name"], path=r["_path"], component=r["_component"], body=body, links=links)
+        return json.dumps(detail, ensure_ascii=False, indent=2)
+    head = ["%s: %s" % (k, ", ".join(map(str, v)) if isinstance(v, list) else ("" if v is None else v))
+            for k, v in fields.items()]
+    if args.format == "md":
+        return "### %s\n\n`%s`\n\n%s\n\n%s" % (link(r), r["_path"], "\n".join("- " + h for h in head), body)
+    return "== %s (%s)\n%s\n\n%s" % (link(r), r["_path"], "\n".join("  " + h for h in head), body)
 
 
 def cmd_sources(root, project, args):
@@ -299,7 +331,9 @@ def cmd_dashboard(root, project, args):
 def main():
     pwlib.ensure_python()
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("command", choices=["dashboard", "questions", "decisions", "tasks", "sources", "deviations"])
+    ap.add_argument("command", choices=["dashboard", "questions", "decisions", "tasks", "task", "sources",
+                                        "deviations"])
+    ap.add_argument("name", nargs="?", help="task: the task's file name or ID")
     ap.add_argument("--component")
     ap.add_argument("--level", choices=["project", "component"])
     ap.add_argument("--area")
@@ -332,8 +366,13 @@ def main():
 
     root, project, _schema = pwlib.start(args.root)
     handler = {"dashboard": cmd_dashboard, "questions": cmd_questions, "decisions": cmd_decisions,
-               "tasks": cmd_tasks, "sources": cmd_sources, "deviations": cmd_deviations}[args.command]
-    print(handler(root, project, args))
+               "tasks": cmd_tasks, "task": cmd_task, "sources": cmd_sources,
+               "deviations": cmd_deviations}[args.command]
+    try:
+        print(handler(root, project, args))
+    except NotFound as e:
+        print("ERROR: %s" % e, file=sys.stderr)
+        return 1
     return 0
 
 

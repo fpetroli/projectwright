@@ -4,6 +4,7 @@ Finds the project root, loads project.yaml and the method schema, validates the
 configuration and reads the frontmatter of the wiki files. Standard library
 plus the PyYAML copy shipped in _vendor/ (no installation needed).
 """
+import datetime
 import os
 import re
 import sys
@@ -243,6 +244,26 @@ def read_frontmatter(path):
     if not isinstance(data, dict):
         return None, "frontmatter is not a mapping", text
     return data, None, text
+
+
+def body_of(text):
+    """The Markdown body of a file, without its frontmatter."""
+    if text.startswith("---"):
+        end = text.find("\n---", 3)
+        if end >= 0:
+            return text[end + 4:].lstrip("\n")
+    return text
+
+
+def plain(v):
+    """A frontmatter value as JSON can hold it: dates as ISO strings."""
+    if isinstance(v, (datetime.date, datetime.datetime)):
+        return v.isoformat()
+    if isinstance(v, list):
+        return [plain(x) for x in v]
+    if v is None or isinstance(v, (str, int, float, bool)):
+        return v
+    return str(v)
 
 
 def has_bom(path):
