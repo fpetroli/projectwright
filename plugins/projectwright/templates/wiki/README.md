@@ -37,7 +37,7 @@ wiki/
 └── architecture/             ── OPTIONAL module: cross-cutting technical views, standards, contracts
 ```
 
-`board.html`, in the project root, is a generated, read-only view of the wiki for people (overview, task board, questions, decisions): it reads these files, so it is never out of date and never versioned.
+`board.html`, in the project root, is a generated, read-only view of the tasks for people (a board in columns and a table): it reads these files, so it is never out of date and never versioned.
 
 Files created on request (exports, drafts, support scripts…) live in `utils/` (`paths.utils`), outside the wiki: they are not knowledge, and a fact written only there is invisible to the dashboard and to the pre-code gate.
 

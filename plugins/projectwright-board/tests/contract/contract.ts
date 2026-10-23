@@ -1,4 +1,4 @@
-// The real output of the projectwright scripts on a sample project.
+// The real output of the projectwright scripts on a sample project, and the board model.
 // Written by make_contract.py: do not edit; run it again after changing the scripts.
 
 export const TASKS: Record<string, unknown>[] = [
@@ -8,7 +8,11 @@ export const TASKS: Record<string, unknown>[] = [
     "priority": "medium",
     "phase": "sprint-1",
     "assignee": "maintainer",
-    "title": "Release notes"
+    "title": "Release notes",
+    "id": "T-PRJ-0001",
+    "updated": "2026-01-19",
+    "closed_on": "2026-01-19",
+    "blocked_by": ""
   },
   {
     "task": "[[T-WEB-0001-checkout-page]]",
@@ -16,7 +20,11 @@ export const TASKS: Record<string, unknown>[] = [
     "priority": "high",
     "phase": "sprint-1",
     "assignee": "frontend developer",
-    "title": "Checkout page"
+    "title": "Checkout page",
+    "id": "T-WEB-0001",
+    "updated": "2026-01-19",
+    "closed_on": "",
+    "blocked_by": ""
   },
   {
     "task": "[[T-WEB-0002-payment-step]]",
@@ -24,7 +32,11 @@ export const TASKS: Record<string, unknown>[] = [
     "priority": "medium",
     "phase": "sprint-1",
     "assignee": "frontend developer",
-    "title": "Payment step"
+    "title": "Payment step",
+    "id": "T-WEB-0002",
+    "updated": "2026-01-19",
+    "closed_on": "",
+    "blocked_by": ""
   },
   {
     "task": "[[T-WEB-0003-order-history]]",
@@ -32,7 +44,11 @@ export const TASKS: Record<string, unknown>[] = [
     "priority": "low",
     "phase": "sprint-2",
     "assignee": "",
-    "title": "Order history"
+    "title": "Order history",
+    "id": "T-WEB-0003",
+    "updated": "2026-01-19",
+    "closed_on": "",
+    "blocked_by": "T-WEB-0002-payment-step"
   },
   {
     "task": "[[T-WEB-0004-old-cart]]",
@@ -40,7 +56,11 @@ export const TASKS: Record<string, unknown>[] = [
     "priority": "low",
     "phase": "",
     "assignee": "",
-    "title": "Old cart"
+    "title": "Old cart",
+    "id": "T-WEB-0004",
+    "updated": "2026-01-19",
+    "closed_on": "2026-01-15",
+    "blocked_by": ""
   }
 ]
 
@@ -163,5 +183,102 @@ export const DETAILS: Record<string, Record<string, unknown>> = {
     "component": null,
     "body": "# T-PRJ-0001 — Release notes\n\n**Goal** — Notes for the first release.\n\n**Acceptance criteria**\n- Every change is listed.\n\n**Notes** — None.\n",
     "links": []
+  }
+}
+
+export const MODEL: Record<string, unknown> = {
+  "_comment": "What the two boards show, defined once: board.html (scripts/board.py) and the pane of projectwright-board read this file. Colors are names; each board turns them into its own palette. Tasks are in ID order; the history columns show the newest first.",
+  "columns": [
+    {
+      "progress": "in-progress",
+      "label": "In progress",
+      "color": "blue"
+    },
+    {
+      "progress": "blocked",
+      "label": "Blocked",
+      "color": "red"
+    },
+    {
+      "progress": "todo",
+      "label": "To do",
+      "color": "gray"
+    },
+    {
+      "progress": "done",
+      "label": "Done",
+      "color": "green"
+    },
+    {
+      "progress": "cancelled",
+      "label": "Cancelled",
+      "color": "gray"
+    }
+  ],
+  "hide_when_empty": [
+    "cancelled"
+  ],
+  "history": {
+    "columns": [
+      "done",
+      "cancelled"
+    ],
+    "shown": 3,
+    "newest_first": true
+  },
+  "priorities": [
+    {
+      "value": "high",
+      "label": "High",
+      "color": "red"
+    },
+    {
+      "value": "medium",
+      "label": "Medium",
+      "color": "yellow"
+    },
+    {
+      "value": "low",
+      "label": "Low",
+      "color": "gray"
+    }
+  ],
+  "card": [
+    "title",
+    "id",
+    "priority",
+    "assignee",
+    "blocked_by"
+  ],
+  "table": [
+    "title",
+    "id",
+    "progress",
+    "priority",
+    "phase",
+    "assignee",
+    "updated"
+  ],
+  "detail": [
+    "progress",
+    "priority",
+    "phase",
+    "assignee",
+    "created",
+    "updated",
+    "closed_on",
+    "blocked_by"
+  ],
+  "fields": {
+    "title": "Name",
+    "id": "ID",
+    "progress": "Status",
+    "priority": "Priority",
+    "phase": "Phase",
+    "assignee": "Assignee",
+    "created": "Created",
+    "updated": "Updated",
+    "closed_on": "Closed on",
+    "blocked_by": "Blocked by"
   }
 }

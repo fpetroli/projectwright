@@ -1,0 +1,96 @@
+{
+  "_comment": "What the two boards show, defined once: board.html (scripts/board.py) and the pane of projectwright-board read this file. Colors are names; each board turns them into its own palette. Tasks are in ID order; the history columns show the newest first.",
+  "columns": [
+    {
+      "progress": "in-progress",
+      "label": "In progress",
+      "color": "blue"
+    },
+    {
+      "progress": "blocked",
+      "label": "Blocked",
+      "color": "red"
+    },
+    {
+      "progress": "todo",
+      "label": "To do",
+      "color": "gray"
+    },
+    {
+      "progress": "done",
+      "label": "Done",
+      "color": "green"
+    },
+    {
+      "progress": "cancelled",
+      "label": "Cancelled",
+      "color": "gray"
+    }
+  ],
+  "hide_when_empty": [
+    "cancelled"
+  ],
+  "history": {
+    "columns": [
+      "done",
+      "cancelled"
+    ],
+    "shown": 3,
+    "newest_first": true
+  },
+  "priorities": [
+    {
+      "value": "high",
+      "label": "High",
+      "color": "red"
+    },
+    {
+      "value": "medium",
+      "label": "Medium",
+      "color": "yellow"
+    },
+    {
+      "value": "low",
+      "label": "Low",
+      "color": "gray"
+    }
+  ],
+  "card": [
+    "title",
+    "id",
+    "priority",
+    "assignee",
+    "blocked_by"
+  ],
+  "table": [
+    "title",
+    "id",
+    "progress",
+    "priority",
+    "phase",
+    "assignee",
+    "updated"
+  ],
+  "detail": [
+    "progress",
+    "priority",
+    "phase",
+    "assignee",
+    "created",
+    "updated",
+    "closed_on",
+    "blocked_by"
+  ],
+  "fields": {
+    "title": "Name",
+    "id": "ID",
+    "progress": "Status",
+    "priority": "Priority",
+    "phase": "Phase",
+    "assignee": "Assignee",
+    "created": "Created",
+    "updated": "Updated",
+    "closed_on": "Closed on",
+    "blocked_by": "Blocked by"
+  }
+}

@@ -7,98 +7,135 @@
 <!--
   projectwright board — LAYOUT ONLY. The data are read from the wiki by
   scripts/board.py, which writes board.html in the project root (generated,
-  not versioned). This template is a file of the framework: a project can
-  change it, and the change is a deviation.
+  not versioned): the tasks, and what a board shows (assets/board-model.json,
+  the same definition the pane of projectwright-board reads). This template is
+  a file of the framework: a project can change it, and the change is a deviation.
 -->
 <style>
 :root {
-  --bg: #f6f7f9; --panel: #ffffff; --text: #1d2330; --muted: #667085; --line: #e3e6eb;
-  --accent: #3b5bdb; --red: #d92d20; --orange: #e8590c; --yellow: #c9a000; --green: #2f9e44; --grey: #868e96;
-  --chip: #eef1f6; --shadow: 0 1px 2px rgba(16,24,40,.06);
+  --bg: #ffffff; --text: #37352f; --muted: #787774; --faint: #9b9a97; --line: #e9e9e7; --hover: #f7f7f5;
+  --card: #ffffff; --accent: #2383e2; --shadow: 0 0 0 1px rgba(15,15,15,.07), 0 2px 4px rgba(15,15,15,.08);
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* the named colors of board-model.json: chip background, chip text, column background */
+  --gray-bg: #e3e2e0; --gray-fg: #32302c; --gray-col: #f9f9f8;
+  --blue-bg: #d3e5ef; --blue-fg: #183347; --blue-col: #f5f9fc;
+  --red-bg: #ffe2dd; --red-fg: #5d1715; --red-col: #fdf6f5;
+  --green-bg: #dbeddb; --green-fg: #1c3829; --green-col: #f6faf6;
+  --yellow-bg: #fdecc8; --yellow-fg: #402c1b; --yellow-col: #fcfaf3;
 }
 @media (prefers-color-scheme: dark) {
-  :root { --bg: #14161b; --panel: #1c1f26; --text: #e6e8ec; --muted: #98a1b2; --line: #2c313b;
-          --accent: #7b93ff; --chip: #262a33; --shadow: none; }
+  :root { --bg: #191919; --text: #d4d4d4; --muted: #9b9b9b; --faint: #7f7f7f; --line: #2f2f2f; --hover: #232323;
+          --card: #252525; --accent: #529cca; --shadow: 0 0 0 1px rgba(255,255,255,.07), 0 2px 4px rgba(0,0,0,.3);
+          --gray-bg: #3a3a3a; --gray-fg: #e0e0e0; --gray-col: #1e1e1e;
+          --blue-bg: #28456c; --blue-fg: #e6f0fa; --blue-col: #1b2129;
+          --red-bg: #6e3630; --red-fg: #fbe4e1; --red-col: #241b1a;
+          --green-bg: #2b593f; --green-fg: #e0f2e6; --green-col: #1a221d;
+          --yellow-bg: #89632a; --yellow-fg: #fbf0dc; --yellow-col: #23201a;
+          color-scheme: dark; }
 }
 * { box-sizing: border-box; }
-body { margin: 0; font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); }
-header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; padding: 14px 20px; background: var(--panel); border-bottom: 1px solid var(--line); }
-header h1 { font-size: 17px; margin: 0; }
-header .meta { color: var(--muted); font-size: 12px; }
-nav { display: flex; gap: 4px; flex-wrap: wrap; }
-nav button { border: 0; background: none; color: var(--muted); padding: 6px 10px; border-radius: 6px; cursor: pointer; font: inherit; }
-nav button.active { background: var(--chip); color: var(--text); font-weight: 600; }
-#search { margin-left: auto; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text); min-width: 200px; font: inherit; }
-main { padding: 18px 20px 40px; }
-.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin-bottom: 18px; }
-.stat { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; box-shadow: var(--shadow); }
-.stat .n { font-size: 24px; font-weight: 700; }
-.stat .l { color: var(--muted); font-size: 12px; }
-.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; box-shadow: var(--shadow); }
-.panel h2 { font-size: 14px; margin: 0 0 10px; }
-.filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
-.filters select { padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--text); font: inherit; }
-.board { display: grid; grid-template-columns: repeat(5, minmax(200px, 1fr)); gap: 12px; overflow-x: auto; }
-.col { background: var(--chip); border-radius: 10px; padding: 10px; min-height: 120px; }
-.col h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 2px 4px 10px; display: flex; justify-content: space-between; }
-.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; margin-bottom: 8px; cursor: pointer; box-shadow: var(--shadow); }
-.card:hover { border-color: var(--accent); }
-.card .id { font-size: 11px; color: var(--muted); font-family: ui-monospace, monospace; }
-.card .t { margin: 3px 0 6px; font-weight: 500; }
-.chips { display: flex; flex-wrap: wrap; gap: 4px; }
-.chip { font-size: 11px; background: var(--chip); color: var(--muted); padding: 1px 7px; border-radius: 10px; }
-.chip.high, .chip.red { background: var(--red); color: #fff; }
-.chip.medium, .chip.orange { background: var(--orange); color: #fff; }
-.chip.low, .chip.yellow { background: var(--yellow); color: #fff; }
-.chip.blocked { background: var(--red); color: #fff; }
-.chip.superseded { text-decoration: line-through; }
-table { width: 100%; border-collapse: collapse; }
-th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
-th { font-size: 12px; color: var(--muted); font-weight: 600; }
+body { margin: 0; font: 15px/1.5 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+       background: var(--bg); color: var(--text); }
+main { max-width: 1400px; margin: 0 auto; padding: 36px clamp(16px, 4vw, 64px) 48px; display: grid; gap: 14px; }
+.head { display: grid; gap: 4px; }
+.icon { width: 44px; height: 44px; border-radius: 8px; background: var(--hover); border: 1px solid var(--line);
+        display: grid; place-items: center; font-weight: 700; color: var(--muted); }
+h1 { font-size: 30px; line-height: 1.2; margin: 4px 0 0; }
+.meta { color: var(--muted); font-size: 13px; display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.progress { display: flex; gap: 2px; height: 6px; border-radius: 3px; overflow: hidden; }
+.views { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; border-bottom: 1px solid var(--line); }
+.views button { font: inherit; font-size: 14px; background: none; border: 0; color: var(--muted); cursor: pointer;
+                padding: 6px 8px 8px; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.views button.active { color: var(--text); border-bottom-color: var(--text); font-weight: 600; }
+#search { margin-left: auto; margin-bottom: 6px; padding: 4px 9px; border: 1px solid var(--line); border-radius: 6px;
+          background: var(--bg); color: var(--text); font: inherit; font-size: 13px; min-width: 180px; }
+button:focus-visible, .card:focus-visible, tr.row:focus-visible, #search:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.chip { display: inline-flex; align-items: center; gap: 5px; border-radius: 4px; padding: 0 6px; font-size: 12px; line-height: 20px; white-space: nowrap; }
+.chip.dot::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: .7; }
+.c-gray { background: var(--gray-bg); color: var(--gray-fg); } .c-blue { background: var(--blue-bg); color: var(--blue-fg); }
+.c-red { background: var(--red-bg); color: var(--red-fg); } .c-green { background: var(--green-bg); color: var(--green-fg); }
+.c-yellow { background: var(--yellow-bg); color: var(--yellow-fg); }
+.kanban { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(240px, 1fr); gap: 12px; overflow-x: auto; padding: 4px 2px 8px; }
+.col { border-radius: 8px; padding: 8px; display: grid; gap: 8px; align-content: start; }
+.col-head { display: flex; align-items: center; gap: 8px; padding: 2px 2px 4px; }
+.n { color: var(--faint); font-size: 13px; font-variant-numeric: tabular-nums; }
+.card { background: var(--card); border: 0; border-radius: 6px; box-shadow: var(--shadow); padding: 9px 10px 10px; display: grid; gap: 6px;
+        cursor: pointer; text-align: left; font: inherit; color: inherit; width: 100%; }
+.card:hover { background: var(--hover); }
+.card .t { font-weight: 600; font-size: 14px; line-height: 1.35; }
+.card.cancelled .t { text-decoration: line-through; color: var(--muted); }
+.props { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.id { font-family: var(--mono); font-size: 12px; color: var(--faint); }
+.who { font-size: 12px; color: var(--muted); }
+.more { font: inherit; font-size: 13px; color: var(--faint); background: none; border: 0; text-align: left; padding: 4px 6px; border-radius: 4px; cursor: pointer; }
+.more:hover { background: var(--hover); }
+.empty { color: var(--faint); font-size: 13px; padding: 4px 6px; }
+.table { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; min-width: 760px; }
+th { text-align: left; font-weight: 500; color: var(--muted); font-size: 13px; padding: 6px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { padding: 6px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+th + th, td + td { border-left: 1px solid var(--line); }
 tr.row { cursor: pointer; }
-tr.row:hover td { background: var(--chip); }
-.gate { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
-.gate.red { background: var(--red); } .gate.orange { background: var(--orange); } .gate.yellow { background: var(--yellow); }
-.empty { color: var(--muted); font-style: italic; padding: 6px 2px; }
-.note { color: var(--muted); font-size: 12px; }
-#drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(620px, 100%); background: var(--panel); border-left: 1px solid var(--line); box-shadow: -8px 0 24px rgba(0,0,0,.12); transform: translateX(100%); transition: transform .18s ease; overflow-y: auto; padding: 18px 22px 40px; z-index: 10; }
-#drawer.open { transform: none; }
-#drawer .close { float: right; border: 0; background: var(--chip); color: var(--text); border-radius: 6px; padding: 4px 10px; cursor: pointer; }
-#drawer h2 { margin: 4px 0 10px; font-size: 17px; }
-dl.fields { display: grid; grid-template-columns: 140px 1fr; gap: 4px 12px; margin: 0 0 14px; }
-dl.fields dt { color: var(--muted); }
-dl.fields dd { margin: 0; }
-.body { border-top: 1px solid var(--line); padding-top: 10px; }
-.body h1, .body h2, .body h3 { font-size: 14px; margin: 14px 0 6px; }
-.body code { background: var(--chip); padding: 0 4px; border-radius: 4px; font-size: 12.5px; }
-.body pre { background: var(--chip); padding: 8px 10px; border-radius: 6px; overflow-x: auto; }
+tr.row:hover td { background: var(--hover); }
+td.title { font-weight: 600; }
+td.mono { font-family: var(--mono); font-size: 12px; color: var(--muted); white-space: nowrap; }
+td.date { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+tr.group td { border-left: 0; padding-top: 16px; }
+.note { color: var(--muted); font-size: 13px; }
+#peek { position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 100%); background: var(--bg); border-left: 1px solid var(--line);
+        box-shadow: -8px 0 24px rgba(15,15,15,.1); transform: translateX(100%); transition: transform .18s ease; overflow-y: auto;
+        padding: 18px 28px 40px; z-index: 10; display: grid; gap: 14px; align-content: start; }
+#peek.open { transform: none; }
+@media (prefers-reduced-motion: reduce) { #peek { transition: none; } }
+.peek-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.peek-top button { font: inherit; font-size: 13px; background: none; border: 1px solid var(--line); border-radius: 5px; color: var(--muted); padding: 2px 9px; cursor: pointer; }
+#peek h2 { font-size: 24px; line-height: 1.25; margin: 0; }
+dl { display: grid; grid-template-columns: 120px 1fr; gap: 6px 12px; margin: 0; font-size: 14px; }
+dt { color: var(--muted); }
+dd { margin: 0; min-width: 0; }
+.body { border-top: 1px solid var(--line); padding-top: 12px; font-size: 14px; }
+.body h3 { font-size: 15px; margin: 14px 0 6px; }
+.body p { margin: 0 0 8px; }
+.body code { background: var(--hover); border: 1px solid var(--line); padding: 0 4px; border-radius: 4px; font-family: var(--mono); font-size: 12.5px; }
+.body pre { background: var(--hover); padding: 8px 10px; border-radius: 6px; overflow-x: auto; }
+.links { display: grid; gap: 4px; font-size: 14px; }
+.links b { font-size: 13px; }
 a.wl { color: var(--accent); cursor: pointer; text-decoration: none; }
 a.wl:hover { text-decoration: underline; }
-a.wl.missing { color: var(--muted); cursor: default; }
-.warn { color: var(--red); font-weight: 600; }
+.plain { color: var(--muted); }
 </style>
 </head>
 <body>
-<header>
-  <h1 id="title">Board</h1>
-  <span class="meta" id="meta"></span>
-  <nav id="tabs"></nav>
-  <input id="search" type="search" placeholder="Search…">
-</header>
-<main id="view"></main>
-<aside id="drawer"></aside>
+<main>
+  <div class="head">
+    <div class="icon" id="icon" aria-hidden="true"></div>
+    <h1 id="title">Tasks</h1>
+    <div class="meta" id="meta"></div>
+  </div>
+  <div class="progress" id="progress"></div>
+  <div class="views">
+    <button data-view="board">Board</button>
+    <button data-view="table">Table</button>
+    <input id="search" type="search" placeholder="Search…" aria-label="Search the tasks">
+  </div>
+  <div id="view"></div>
+  <p class="note">The board shows the tasks of the wiki and changes nothing. To create, move, assign or close a task, ask Claude
+    (<code>/projectwright:manage-tasks</code>) or edit the task file: the board is regenerated automatically.</p>
+</main>
+<aside id="peek" aria-label="Task"></aside>
 
 <script id="board-data" type="application/json">/*__BOARD_DATA__*/</script>
 <script>
 "use strict";
 var DATA = JSON.parse(document.getElementById("board-data").textContent);
-var RECORDS = DATA.records || [];
+var MODEL = DATA.model;
+var TASKS = DATA.tasks || [];
 var BY_NAME = {};
-RECORDS.forEach(function (r) { BY_NAME[r.name] = r; });
-
-var COLUMNS = [["todo", "To do"], ["in-progress", "In progress"], ["blocked", "Blocked"], ["done", "Done"], ["cancelled", "Cancelled"]];
-var GATES = [["red", "🔴 Stop"], ["orange", "🟠 Proceed with the assumption"], ["yellow", "🟡 Decide when needed"]];
-var state = { tab: "overview", q: "", f: { component: "", phase: "", assignee: "", priority: "" } };
+TASKS.forEach(function (t) { BY_NAME[t.name] = t; });
+var COLUMN = {}, PRIORITY = {};
+MODEL.columns.forEach(function (c) { COLUMN[c.progress] = c; });
+MODEL.priorities.forEach(function (p) { PRIORITY[p.value] = p; });
+var state = { view: "board", q: "", expanded: {} };
 
 function esc(s) {
   return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
@@ -107,18 +144,33 @@ function esc(s) {
 }
 function list(v) { return Array.isArray(v) ? v : (v == null || v === "" ? [] : [v]); }
 function linkName(v) { var m = /\[\[([^\]|#]+)/.exec(String(v)); return m ? m[1].trim() : String(v); }
+function idOf(name) { var m = /^(T-[A-Z0-9]+-\d+)/.exec(name); return m ? m[1] : name; }
+// A link to another task opens it; any other note of the wiki is a name, the board shows only tasks.
 function wl(name, label) {
   name = linkName(name);
-  var known = BY_NAME[name] ? "" : " missing";
-  return '<a class="wl' + known + '" data-ref="' + esc(name) + '">' + esc(label || name) + "</a>";
+  if (!BY_NAME[name]) return '<span class="plain">' + esc(label || name) + "</span>";
+  return '<a class="wl" data-ref="' + esc(name) + '">' + esc(label || idOf(name) + " " + (BY_NAME[name].title || "")) + "</a>";
 }
-function matches(r) {
+function chip(text, color, dot) { return '<span class="chip c-' + esc(color || "gray") + (dot ? " dot" : "") + '">' + esc(text) + "</span>"; }
+function statusChip(progress) { var c = COLUMN[progress]; return c ? chip(c.label, c.color, true) : esc(progress); }
+function priorityChip(value) { var p = PRIORITY[value]; return p ? chip(p.label, p.color) : esc(value); }
+function blockers(t) { return list(t.blocked_by).map(linkName); }
+function matches(t) {
   if (!state.q) return true;
-  var hay = [r.id, r.title, r.name, r.body, r.assignee, r.phase, r.area].join(" ").toLowerCase();
-  return hay.indexOf(state.q.toLowerCase()) >= 0;
+  return [t.id, t.title, t.name, t.body, t.assignee, t.phase].join(" ").toLowerCase().indexOf(state.q.toLowerCase()) >= 0;
 }
-function chip(text, cls) { return text ? '<span class="chip ' + esc(cls || "") + '">' + esc(text) + "</span>" : ""; }
-function byType(t) { return RECORDS.filter(function (r) { return r.type === t; }); }
+
+// One field of a task as the model names it, drawn the same way in the card, the table and the detail.
+function value(t, field) {
+  switch (field) {
+    case "progress": return statusChip(t.progress);
+    case "priority": return t.priority ? priorityChip(t.priority) : "";
+    case "assignee": return t.assignee ? '<span class="who">@' + esc(t.assignee) + "</span>" : "";
+    case "id": return '<span class="id">' + esc(t.id || idOf(t.name)) + "</span>";
+    case "blocked_by": return blockers(t).length ? chip("Blocked by " + blockers(t).map(idOf).join(", "), "red") : "";
+    default: return esc(t[field]);
+  }
+}
 
 function md(text) {
   // Minimal, safe Markdown: escape everything, then a few inline and block rules.
@@ -129,10 +181,9 @@ function md(text) {
     var h = /^(#{1,3}) (.*)$/.exec(line);
     var li = /^\s*[-*] (.*)$/.exec(line);
     if (inList && !li) { out.push("</ul>"); inList = false; }
-    if (h) { out.push("<h3>" + inline(h[2]) + "</h3>"); }
+    if (h) { if (h[1] !== "#") out.push("<h3>" + inline(h[2]) + "</h3>"); }  // the note's own heading repeats the title
     else if (li) { if (!inList) { out.push("<ul>"); inList = true; } out.push("<li>" + inline(li[1]) + "</li>"); }
-    else if (line.trim() === "") { out.push(""); }
-    else { out.push("<p>" + inline(line) + "</p>"); }
+    else if (line.trim() !== "") { out.push("<p>" + inline(line) + "</p>"); }
   });
   if (inList) out.push("</ul>");
   if (inCode) out.push("</pre>");
@@ -149,203 +200,117 @@ function inline(s) {
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
 }
 
-function openDetail(name) {
-  var r = BY_NAME[name];
-  if (!r) return;
-  var rows = [
-    ["Type", r.type], ["ID", r.id], ["Status", r.status], ["Progress", r.progress], ["Gate", r.gate],
-    ["Lifecycle", r.lifecycle], ["Priority", r.priority], ["Phase", r.phase], ["Assignee", r.assignee],
-    ["Area", r.area], ["Component", r.component], ["Decision owner", r.decision_owner],
-    ["Assumption", r.assumption], ["Precaution", r.precaution], ["Created", r.created], ["Updated", r.updated],
-    ["Closed on", r.closed_on], ["Code", r.code], ["Component status", r.component_status], ["Repository", r.repository]
-  ];
-  var links = r.links || {};
-  var linkRows = Object.keys(links).map(function (k) {
-    return [k.replace(/_/g, " "), list(links[k]).map(function (n) { return wl(n); }).join(", ")];
+// The tasks of a column in the order of the model: by ID, the history newest first and only the latest few.
+function column(progress, all) {
+  var items = all.filter(function (t) { return t.progress === progress; });
+  var history = MODEL.history.columns.indexOf(progress) >= 0;
+  if (history && MODEL.history.newest_first) items.reverse();
+  var shown = history && !state.expanded[progress] ? items.slice(0, MODEL.history.shown) : items;
+  return { items: items, shown: shown };
+}
+function visibleColumns(all) {
+  return MODEL.columns.filter(function (c) {
+    return MODEL.hide_when_empty.indexOf(c.progress) < 0 || all.some(function (t) { return t.progress === c.progress; });
   });
-  var html = '<button class="close" id="close">Close</button>';
-  html += "<h2>" + esc(r.title || r.name) + "</h2>";
-  html += '<div class="note">' + esc(r.path) + "</div><br>";
-  html += '<dl class="fields">';
-  rows.forEach(function (kv) { if (kv[1] != null && kv[1] !== "") html += "<dt>" + esc(kv[0]) + "</dt><dd>" + esc(kv[1]) + "</dd>"; });
-  linkRows.forEach(function (kv) { if (kv[1]) html += "<dt>" + esc(kv[0]) + "</dt><dd>" + kv[1] + "</dd>"; });
-  html += "</dl>";
-  html += '<div class="body">' + md(r.body) + "</div>";
-  var d = document.getElementById("drawer");
-  d.innerHTML = html;
-  d.classList.add("open");
-  document.getElementById("close").onclick = function () { d.classList.remove("open"); };
 }
 
-function stat(n, label, warn) { return '<div class="stat"><div class="n' + (warn ? " warn" : "") + '">' + esc(n) + '</div><div class="l">' + esc(label) + "</div></div>"; }
-
-function viewOverview() {
-  var qs = byType("question").filter(function (r) { return r.lifecycle === "open"; });
-  var tasks = byType("task");
-  var dec = byType("decision").filter(function (r) { return r.status !== "superseded"; });
-  var s = DATA.summary || {};
-  var html = '<div class="cards">';
-  html += stat(qs.filter(function (r) { return r.gate === "red"; }).length, "open questions 🔴", qs.some(function (r) { return r.gate === "red"; }));
-  html += stat(qs.filter(function (r) { return r.gate === "orange"; }).length, "open questions 🟠");
-  html += stat(qs.length, "open questions in total");
-  if (DATA.project.tasks_mode === "wiki") {
-    html += stat(tasks.filter(function (r) { return r.progress === "in-progress"; }).length, "tasks in progress");
-    html += stat(tasks.filter(function (r) { return r.progress === "blocked"; }).length, "tasks blocked", tasks.some(function (r) { return r.progress === "blocked"; }));
-  }
-  html += stat(dec.length, "decisions in force");
-  html += stat(s.pending_cards || 0, "cards to integrate");
-  html += stat(s.lint == null ? "?" : s.lint, "wiki lint violations", s.lint > 0);
-  html += "</div>";
-
-  html += '<div class="panel"><h2>Pre-code gate — open questions 🔴 / 🟠</h2>';
-  var blocking = qs.filter(function (r) { return r.gate === "red" || r.gate === "orange"; }).filter(matches);
-  html += blocking.length ? table(blocking, ["question", "assumption", "precaution", "owner"]) : '<div class="empty">None.</div>';
-  html += "</div>";
-
-  var recent = dec.slice().sort(function (a, b) { return String(b.updated + b.created + b.name).localeCompare(String(a.updated + a.created + a.name)); }).slice(0, 8);
-  html += '<div class="panel"><h2>Recent decisions</h2>' + (recent.length ? table(recent, ["decision", "area", "updated"]) : '<div class="empty">None.</div>') + "</div>";
-
-  html += '<div class="panel"><h2>Components</h2>' + componentsTable() + "</div>";
-  if (s.deviations) html += '<div class="panel"><h2>Framework</h2><div>' + esc(s.deviations) + "</div></div>";
-  return html;
+function card(t) {
+  var props = MODEL.card.filter(function (f) { return f !== "title"; }).map(function (f) { return value(t, f); }).join("");
+  return '<button class="card ' + esc(t.progress) + '" data-ref="' + esc(t.name) + '"><span class="t">' + esc(t.title || t.name) +
+         '</span><span class="props">' + props + "</span></button>";
 }
 
-function table(rows, cols) {
-  var head = { question: "Question", decision: "Decision", assumption: "Assumption", precaution: "Precaution", owner: "Decision owner",
-               area: "Area", updated: "Updated", status: "Status", gate: "Gate", lifecycle: "Lifecycle", component: "Component" };
-  var html = "<table><tr>" + cols.map(function (c) { return "<th>" + esc(head[c] || c) + "</th>"; }).join("") + "</tr>";
-  rows.forEach(function (r) {
-    html += '<tr class="row" data-ref="' + esc(r.name) + '">';
-    cols.forEach(function (c) {
-      var v;
-      if (c === "question" || c === "decision") v = (r.gate ? '<span class="gate ' + esc(r.gate) + '"></span>' : "") + esc(r.id ? r.id + " — " : "") + esc(stripId(r.title, r.id));
-      else if (c === "owner") v = esc(r.decision_owner);
-      else if (c === "status") v = chip(r.status, r.status);
-      else v = esc(r[c]);
-      html += "<td>" + v + "</td>";
-    });
-    html += "</tr>";
-  });
-  return html + "</table>";
-}
-function stripId(title, id) {
-  title = String(title || "");
-  if (id && title.indexOf(id) === 0) title = title.slice(id.length).replace(/^\s*[—-]\s*/, "");
-  return title;
+function viewBoard(all) {
+  return '<div class="kanban">' + visibleColumns(all).map(function (c) {
+    var col = column(c.progress, all);
+    var rest = col.items.length - col.shown.length;
+    return '<div class="col" style="background:var(--' + esc(c.color) + '-col)"><div class="col-head">' + chip(c.label, c.color, true) +
+           '<span class="n">' + col.items.length + "</span></div>" +
+           (col.items.length ? col.shown.map(card).join("") : '<div class="empty">No tasks</div>') +
+           (rest > 0 ? '<button class="more" data-more="' + esc(c.progress) + '">+ ' + rest + " more</button>" : "") + "</div>";
+  }).join("") + "</div>";
 }
 
-function componentsTable() {
-  var comps = DATA.components || [];
-  if (!comps.length) return '<div class="empty">No component registered.</div>';
-  var html = "<table><tr><th>Component</th><th>Code</th><th>Status</th><th>Open questions</th><th>Open tasks</th></tr>";
-  comps.forEach(function (c) {
-    var oq = RECORDS.filter(function (r) { return r.type === "question" && r.lifecycle === "open" && r.component === c.code; }).length;
-    var ot = RECORDS.filter(function (r) { return r.type === "task" && r.component === c.code && ["done", "cancelled"].indexOf(r.progress) < 0; }).length;
-    html += '<tr class="row" data-ref="' + esc(c.name) + '"><td>' + esc(c.name) + "</td><td>" + esc(c.code) + "</td><td>" + esc(c.status) + "</td><td>" + oq + "</td><td>" + ot + "</td></tr>";
-  });
-  return html + "</table>";
+function viewTable(all) {
+  var head = MODEL.table.map(function (f) { return "<th>" + esc(MODEL.fields[f] || f) + "</th>"; }).join("");
+  var rows = visibleColumns(all).map(function (c) {
+    var items = column(c.progress, all).items;
+    if (!items.length) return "";
+    return '<tr class="group"><td colspan="' + MODEL.table.length + '">' + chip(c.label, c.color, true) + ' <span class="n">' + items.length + "</span></td></tr>" +
+      items.map(function (t) {
+        return '<tr class="row" tabindex="0" data-ref="' + esc(t.name) + '">' + MODEL.table.map(function (f) {
+          var cls = f === "title" ? "title" : f === "id" ? "mono" : /^(created|updated|closed_on)$/.test(f) ? "date" : "";
+          return '<td class="' + cls + '">' + (f === "title" ? esc(t.title || t.name) : f === "id" ? esc(t.id || idOf(t.name)) : value(t, f)) + "</td>";
+        }).join("") + "</tr>";
+      }).join("");
+  }).join("");
+  return '<div class="table"><table><thead><tr>' + head + "</tr></thead><tbody>" + rows + "</tbody></table></div>";
 }
 
-function optionList(field, label) {
-  var vals = {};
-  byType("task").forEach(function (r) { var v = field === "component" ? (r.component || "project") : r[field]; if (v) vals[v] = 1; });
-  var html = '<select data-filter="' + field + '"><option value="">' + esc(label) + ": all</option>";
-  Object.keys(vals).sort().forEach(function (v) { html += "<option" + (state.f[field] === v ? " selected" : "") + ">" + esc(v) + "</option>"; });
-  return html + "</select>";
+function openTask(name) {
+  var t = BY_NAME[name];
+  if (!t) return;
+  var rows = MODEL.detail.map(function (f) {
+    var v = f === "blocked_by" ? blockers(t).map(function (n) { return wl(n); }).join(", ") : value(t, f);
+    return v ? "<dt>" + esc(MODEL.fields[f] || f) + "</dt><dd>" + v + "</dd>" : "";
+  }).join("");
+  var linked = list(t.links).filter(function (n) { return BY_NAME[n]; });
+  var others = list(t.links).filter(function (n) { return !BY_NAME[n]; });
+  var html = '<div class="peek-top"><span class="id">' + esc(t.id || idOf(t.name)) + '</span><button id="close">Close</button></div>' +
+             "<h2>" + esc(t.title || t.name) + "</h2><dl>" + rows + "</dl>" + '<div class="body">' + md(t.body) + "</div>";
+  if (linked.length) html += '<div class="links"><b>Linked tasks</b>' + linked.map(function (n) { return "<div>→ " + wl(n) + "</div>"; }).join("") + "</div>";
+  if (others.length) html += '<div class="note">See also: ' + others.map(esc).join(" · ") + "</div>";
+  html += '<div class="note">' + esc(t.path) + "</div>";
+  var p = document.getElementById("peek");
+  p.innerHTML = html;
+  p.classList.add("open");
+  document.getElementById("close").onclick = closeTask;
 }
-
-function viewBoard() {
-  if (DATA.project.tasks_mode !== "wiki") {
-    return '<div class="panel">This project keeps its tasks in an external tracker (<code>tasks.mode: tracker</code>): the board is there.</div>';
-  }
-  var html = '<div class="filters">' + optionList("component", "Component") + optionList("phase", "Phase") +
-             optionList("assignee", "Assignee") + optionList("priority", "Priority") + "</div>";
-  var tasks = byType("task").filter(matches).filter(function (r) {
-    return (!state.f.component || (r.component || "project") === state.f.component) &&
-           (!state.f.phase || r.phase === state.f.phase) &&
-           (!state.f.assignee || r.assignee === state.f.assignee) &&
-           (!state.f.priority || r.priority === state.f.priority);
-  });
-  var rank = { high: 0, medium: 1, low: 2 };
-  html += '<div class="board">';
-  COLUMNS.forEach(function (col) {
-    var items = tasks.filter(function (r) { return r.progress === col[0]; })
-      .sort(function (a, b) { return (rank[a.priority] || 9) - (rank[b.priority] || 9) || String(a.id).localeCompare(String(b.id)); });
-    html += '<div class="col"><h3><span>' + esc(col[1]) + "</span><span>" + items.length + "</span></h3>";
-    if (!items.length) html += '<div class="empty">—</div>';
-    items.forEach(function (r) {
-      var blockers = list((r.links || {}).blocked_by).length;
-      html += '<div class="card" data-ref="' + esc(r.name) + '"><div class="id">' + esc(r.id) + "</div>" +
-              '<div class="t">' + esc(r.title) + '</div><div class="chips">' +
-              chip(r.priority, r.priority) + chip(r.assignee) + chip(r.phase) + chip(r.component || "") +
-              (blockers ? chip("blocked by " + blockers, "blocked") : "") + "</div></div>";
-    });
-    html += "</div>";
-  });
-  html += "</div>";
-  html += '<p class="note">To create, move, assign or close a task, ask Claude (<code>/projectwright:manage-tasks</code>) or edit the task file; the board is regenerated automatically.</p>';
-  return html;
-}
-
-function viewQuestions() {
-  var qs = byType("question").filter(matches);
-  var html = "";
-  GATES.forEach(function (g) {
-    var items = qs.filter(function (r) { return r.lifecycle === "open" && r.gate === g[0]; });
-    html += '<div class="panel"><h2>' + esc(g[1]) + " (" + items.length + ")</h2>" +
-            (items.length ? table(items, ["question", "component", "assumption", "owner"]) : '<div class="empty">None.</div>') + "</div>";
-  });
-  var closed = qs.filter(function (r) { return r.lifecycle === "closed"; });
-  html += '<div class="panel"><h2>Closed (' + closed.length + ")</h2>" + (closed.length ? table(closed, ["question", "component", "updated"]) : '<div class="empty">None.</div>') + "</div>";
-  return html;
-}
-
-function viewDecisions() {
-  var dec = byType("decision").filter(matches).sort(function (a, b) { return String(a.id).localeCompare(String(b.id)); });
-  return '<div class="panel"><h2>Decisions (' + dec.length + ")</h2>" + (dec.length ? table(dec, ["decision", "status", "area", "updated"]) : '<div class="empty">None.</div>') + "</div>";
-}
-
-function viewComponents() { return '<div class="panel"><h2>Components</h2>' + componentsTable() + "</div>"; }
-
-function viewSources() {
-  var rows = (DATA.sources || []).filter(function (r) { return !state.q || JSON.stringify(r).toLowerCase().indexOf(state.q.toLowerCase()) >= 0; });
-  if (!rows.length) return '<div class="panel"><div class="empty">No document ingested yet.</div></div>';
-  var html = '<div class="panel"><h2>Ingestion log (' + rows.length + ")</h2><table><tr><th>Document</th><th>Card</th><th>Ingested on</th><th>Result</th><th>Integrated</th></tr>";
-  rows.forEach(function (r) {
-    html += "<tr><td>" + esc(r.document) + "</td><td>" + (r.card ? wl(r.card) : "") + "</td><td>" + esc(r.ingested_on) + "</td><td>" + esc(r.result) + "</td><td>" + esc(r.integrated) + "</td></tr>";
-  });
-  return html + "</table></div>";
-}
-
-var TABS = [["overview", "Overview", viewOverview], ["board", "Board", viewBoard], ["questions", "Questions", viewQuestions],
-            ["decisions", "Decisions", viewDecisions], ["components", "Components", viewComponents], ["sources", "Sources", viewSources]];
+function closeTask() { document.getElementById("peek").classList.remove("open"); }
 
 function render() {
-  document.getElementById("tabs").innerHTML = TABS.map(function (t) {
-    return '<button data-tab="' + t[0] + '"' + (state.tab === t[0] ? ' class="active"' : "") + ">" + esc(t[1]) + "</button>";
+  var view = document.getElementById("view");
+  Array.prototype.forEach.call(document.querySelectorAll("[data-view]"), function (b) {
+    b.classList.toggle("active", b.getAttribute("data-view") === state.view);
+  });
+  if (DATA.project.tasks_mode !== "wiki") {
+    view.innerHTML = '<p class="note">This project keeps its tasks in an external tracker (<code>tasks.mode: tracker</code>): the board is there.</p>';
+    return;
+  }
+  var all = TASKS.filter(matches);
+  view.innerHTML = !TASKS.length ? '<p class="note">No tasks in the wiki yet.</p>' : state.view === "table" ? viewTable(all) : viewBoard(all);
+  try { localStorage.setItem("pw-board-view", state.view); } catch (e) { /* storage not available */ }
+}
+
+function progressBar() {
+  document.getElementById("progress").innerHTML = MODEL.columns.map(function (c) {
+    var n = TASKS.filter(function (t) { return t.progress === c.progress; }).length;
+    return n ? '<span style="flex:' + n + ";background:var(--" + esc(c.color) + '-bg)" title="' + esc(c.label) + ": " + n + '"></span>' : "";
   }).join("");
-  var tab = TABS.filter(function (t) { return t[0] === state.tab; })[0] || TABS[0];
-  document.getElementById("view").innerHTML = tab[2]();
-  try { localStorage.setItem("pw-board-tab", state.tab); } catch (e) { /* storage not available */ }
 }
 
 document.addEventListener("click", function (e) {
-  var t = e.target.closest("[data-tab]");
-  if (t) { state.tab = t.getAttribute("data-tab"); render(); return; }
+  var v = e.target.closest("[data-view]");
+  if (v) { state.view = v.getAttribute("data-view"); render(); return; }
+  var more = e.target.closest("[data-more]");
+  if (more) { state.expanded[more.getAttribute("data-more")] = true; render(); return; }
   var ref = e.target.closest("[data-ref]");
-  if (ref) { openDetail(ref.getAttribute("data-ref")); }
+  if (ref) openTask(ref.getAttribute("data-ref"));
 });
-document.addEventListener("change", function (e) {
-  var f = e.target.getAttribute && e.target.getAttribute("data-filter");
-  if (f) { state.f[f] = e.target.value; render(); }
+document.addEventListener("keydown", function (e) {
+  if (e.key === "Escape") { closeTask(); return; }
+  var row = e.target.closest && e.target.closest("tr.row");
+  if (row && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openTask(row.getAttribute("data-ref")); }
 });
 document.getElementById("search").addEventListener("input", function (e) { state.q = e.target.value; render(); });
-document.addEventListener("keydown", function (e) { if (e.key === "Escape") document.getElementById("drawer").classList.remove("open"); });
 
-document.getElementById("title").textContent = DATA.project.name + " — board";
-document.title = DATA.project.name + " — board";
-document.getElementById("meta").textContent = "Generated " + DATA.project.generated + " from the wiki · projectwright " + DATA.project.version;
-try { state.tab = localStorage.getItem("pw-board-tab") || state.tab; } catch (e) { /* storage not available */ }
+var done = TASKS.filter(function (t) { return t.progress === "done"; }).length;
+document.title = DATA.project.name + " — tasks";
+document.getElementById("icon").textContent = String(DATA.project.name || "?").slice(0, 2).toUpperCase();
+document.getElementById("meta").innerHTML = "<span>" + esc(DATA.project.name) + " · projectwright " + esc(DATA.project.version) + "</span><span>" +
+  TASKS.length + " tasks · " + done + " done</span><span>generated " + esc(DATA.project.generated) + " from the wiki</span>";
+try { state.view = localStorage.getItem("pw-board-view") || state.view; } catch (e) { /* storage not available */ }
+progressBar();
 render();
 </script>
 </body>

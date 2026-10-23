@@ -2,10 +2,11 @@
 """make_contract — the real output of the projectwright scripts, for the board's tests.
 
 The board relies on the JSON of `wiki-query.py tasks` and `wiki-query.py task`
-(see the README of the plugin). This script builds a sample project with the
-real `scaffold.py`, adds the tasks below, checks it with the real `wiki-lint.py`,
-runs the real queries and writes their output into `contract.ts`, which the
-tests of the board import. A change to the scripts that changes their output
+and on the definition of what a board shows, `assets/board-model.json` (see the
+README of the plugin). This script builds a sample project with the real
+`scaffold.py`, adds the tasks below, checks it with the real `wiki-lint.py`,
+runs the real queries and writes their output, with the model, into
+`contract.ts`, which the tests of the board import. A change to the scripts that changes their output
 shows here first: `--check` fails, the file is written again, and the tests of
 the board run on the new output.
 
@@ -22,6 +23,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 SCRIPTS = HERE.parents[2] / "projectwright" / "scripts"
+MODEL = HERE.parents[2] / "projectwright" / "assets" / "board-model.json"
 OUTPUT = HERE / "contract.ts"
 
 TASK = """---
@@ -106,11 +108,14 @@ def build():
         tasks = json.loads(run([SCRIPTS / "wiki-query.py", "tasks", "--format", "json", "--root", root], root))
         details = {t["name"]: json.loads(run([SCRIPTS / "wiki-query.py", "task", t["name"], "--format", "json",
                                               "--root", root], root)) for t in TASKS}
-    return ("// The real output of the projectwright scripts on a sample project.\n"
+    model = json.loads(MODEL.read_text(encoding="utf-8"))
+    return ("// The real output of the projectwright scripts on a sample project, and the board model.\n"
             "// Written by make_contract.py: do not edit; run it again after changing the scripts.\n\n"
             "export const TASKS: Record<string, unknown>[] = %s\n\n"
-            "export const DETAILS: Record<string, Record<string, unknown>> = %s\n"
-            % (json.dumps(tasks, ensure_ascii=False, indent=2), json.dumps(details, ensure_ascii=False, indent=2)))
+            "export const DETAILS: Record<string, Record<string, unknown>> = %s\n\n"
+            "export const MODEL: Record<string, unknown> = %s\n"
+            % (json.dumps(tasks, ensure_ascii=False, indent=2), json.dumps(details, ensure_ascii=False, indent=2),
+               json.dumps(model, ensure_ascii=False, indent=2)))
 
 
 def main():

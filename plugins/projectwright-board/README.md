@@ -26,9 +26,10 @@ Requirements: a version of Claude Code with hooks modules (mods); Python ≥ 3.1
 
 The pane opens by itself beside the chat when the terminal is wide enough; otherwise, and to open it again, type **`/board`**. The command also answers with the list of tasks as text, which reaches every surface.
 
-- **The list**: the tasks grouped by progress, with a summary and a bar coloured by progress. Tasks in progress and blocked are cards; the others one row each; done and cancelled show only the latest few.
+- **The columns**: in progress, blocked, to do, done (and cancelled, when there is one), shown one at a time: the columns are tabs with their count, and a digit (`1`, `2`, …) chooses one when the pane has the keyboard. Above them, a summary and a bar coloured by progress.
+- **The cards**: each task of the column is a card with its title, ID, priority, assignee and what blocks it; done and cancelled show the newest few, and **+ N more** the rest.
 - **New task** (`n` when the pane has the keyboard): title, priority and notes; Claude creates the task.
-- **The detail**: press a task's title to see its fields, its body and the tasks it links, in place of the list; **← Back** (`b`) returns.
+- **The detail**: press a task's title to see its properties, its body and the tasks it links, in place of the list; **← Back** (`b`) returns.
 - **Edit** (`e`, in the detail): the fields of the task, and in words what to change in its body; Claude applies only what changed.
 - **⇢** on every task, open or closed: Claude reads the task and its context, tells where it stands and asks what you want to do with it.
 
@@ -50,6 +51,7 @@ A request sent from the board shows in the pane until its task is in the wiki. W
 The two plugins are released together, with the same version. The board relies on:
 
 - `wiki-query.py tasks --format json` and `wiki-query.py task <name> --format json`;
+- `assets/board-model.json`, which says what a board shows — columns, colors, priorities, the fields of a card and of the detail — for this pane and for `board.html` alike, so the two show the same thing;
 - the skill `/projectwright:manage-tasks`, named in the requests it sends to Claude;
 - `.claude/.projectwright-plugin`, written by the start-of-session hook of `projectwright`, which says where that plugin runs.
 
@@ -64,7 +66,7 @@ python3 plugins/projectwright-board/tests/contract/make_contract.py --check
 claude plugin test plugins/projectwright-board
 ```
 
-The first command checks that `tests/contract/contract.ts` holds the current output of the `projectwright` scripts: it builds a sample project with the real `scaffold.py`, checks it with `wiki-lint.py` and runs the real queries. When it fails, a change to the scripts changed their output: run it again without `--check` to write the file, then run the tests, which say whether the board still reads it. Run both before every release, and after every change to `wiki-query.py`.
+The first command checks that `tests/contract/contract.ts` holds the current output of the `projectwright` scripts and the current board model: it builds a sample project with the real `scaffold.py`, checks it with `wiki-lint.py` and runs the real queries. When it fails, a change to the scripts changed their output: run it again without `--check` to write the file, then run the tests, which say whether the board still reads it. Run both before every release, and after every change to `wiki-query.py` or to `assets/board-model.json`.
 
 ## Contents
 

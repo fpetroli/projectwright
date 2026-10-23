@@ -12,11 +12,18 @@ The plugins of the marketplace carry the version `0.2.0-dev` until the release: 
 - **`wiki-query.py task <file name or ID>`**: one task in full — every frontmatter field, its body and the notes it links — as JSON (`--format json`), Markdown or a table.
 - **The title of each task** in the JSON of `wiki-query.py tasks` (the table and Markdown outputs, and the dashboard, are unchanged).
 - **The dashboard in JSON**: `wiki-query.py dashboard --format json` prints one object with the sections of the dashboard (blocking questions, other open questions, recent decisions, components, tasks in progress or blocked, cards to integrate, deviations, lint violations); before, it printed the text. The text and Markdown outputs are unchanged.
+- **One definition for the two boards**: `assets/board-model.json` says what a board shows — the columns and their colors, the priorities, the fields of a card, of the table and of the detail, and their names. `board.html` and the pane of `projectwright-board` both read it, so they show the same thing; a project that changes it changes both.
+- **The fields of a card** in the JSON of `wiki-query.py tasks`: `id`, `updated`, `closed_on`, `blocked_by` (the table and Markdown outputs are unchanged).
 - **`/projectwright:upgrade` and the board**: a board copied into the project (`.claude/skills/projectwright-board/`) is replaced with the board released beside the new version; with the plugins installed, the upgrade updates the board too.
+
+### Changed
+
+- **`board.html` shows the tasks only**, laid out like a database: a Board view (the pipeline in columns) and a Table view (rows grouped by progress), with the detail of a task in a panel beside them, and a search. The overview, the questions, the decisions, the components and the sources are no longer in it: the dashboard at the start of each session and the wiki itself keep them.
+- **The pane of `projectwright-board` shows one column at a time**: the columns are tabs with their count, a digit chooses one; every task is a full card (title, ID, priority, assignee, what blocks it), and the done tasks show the newest few, the rest on request. The detail lists the same properties as `board.html`.
 
 ### Upgrade notes
 
-- `projectwright`: nothing to configure, no data to change.
+- `projectwright`: nothing to configure, no data to change. A project that changed `assets/board.html` merges it with the new layout, which is a different page: keep the new one and apply the change again if it is still needed.
 - `projectwright-board` is optional and is not installed by the upgrade. To use it: `claude plugin install projectwright-board@projectwright --scope project`, then a new session. It does not install `projectwright`: a project that copies `projectwright` into `.claude/skills/projectwright/` keeps its copy and installs only the board.
 
 ## [0.1.0] — 2026-10-12

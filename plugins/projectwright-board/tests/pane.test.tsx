@@ -2,6 +2,8 @@ import { expect, mock, test } from 'claude-code/testing'
 
 import { touchesWiki } from '../hooks/paths'
 
+import { MODEL } from './contract/contract'
+
 const PANE = {
   plugin: 'projectwright-board',
   component: 'Pane',
@@ -37,6 +39,7 @@ type Engine = {
   version?: string | null
   tasks?: unknown[] | (() => unknown[])
   pythons?: string[]
+  model?: string | null
 }
 
 // Nothing sits beneath the plugin: these hooks stand for the engine, with a
@@ -64,6 +67,10 @@ const engine = (on: any, opts: Engine = {}) => {
     if (e.path.endsWith('/.projectwright-plugin')) return { value: '/plugin\n' }
     if (e.path === '/plugin/.claude-plugin/plugin.json') return { value: JSON.stringify({ version }) }
     if (e.path.endsWith('/.claude-plugin/plugin.json')) return { value: JSON.stringify({ version: '0.2.0' }) }
+    if (e.path === '/plugin/assets/board-model.json') {
+      if (opts.model === null) throw new Error('ENOENT: no such file')
+      return { value: opts.model ?? JSON.stringify(MODEL) }
+    }
     return { value: '' }
   })
   on('fs.write', (_: unknown, e: any) => { written.push(e.path); return { value: undefined } })
@@ -87,12 +94,54 @@ test('the pane groups the tasks wiki-query answers, with their titles, on every 
 
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
-    expect(await ui.find({ type: 'Text', text: /IN PROGRESS/ })).toBeDefined()
+    // the first column with tasks is shown, the others are tabs; the choice outlives the mount
+    if (surface === 'terminal') expect(await ui.find({ key: 'open-T-WEB-0001-checkout-page' })).toBeDefined()
+    else await ui.press({ key: 'column-in-progress' })
+    expect((await ui.find({ key: 'column-in-progress' }))?.text).toContain('In progress 1')
     expect((await ui.find({ key: 'open-T-WEB-0001-checkout-page' }))?.text).toContain('Checkout page')
-    expect(await ui.find({ type: 'Text', text: /TO DO/ })).toBeDefined()
+    expect(await ui.find({ key: 'open-T-WEB-0002-payment-step' })).toBeUndefined()
+    await ui.press({ key: 'column-todo' })
+    expect((await ui.find({ key: 'open-T-WEB-0002-payment-step' }))?.text).toContain('Payment step')
+    expect(await ui.find({ key: 'open-T-WEB-0001-checkout-page' })).toBeUndefined()
     await ui.unmount()
   }
   expect(ran[0]).toEqual(['python3', '/plugin/scripts/wiki-query.py', 'tasks', '--format', 'json', '--root', '/project'])
+})
+
+test('a card shows the fields of the model: priority, assignee, what blocks it', async ($, on) => {
+  const tasks = [{ ...TASKS[0], id: 'T-WEB-0001', blocked_by: 'T-WEB-0002-payment-step' }, TASKS[1]]
+  engine(on, { tasks })
+  await start($)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /^ High $/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /@frontend developer/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Blocked by T-WEB-0002/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('done tasks show the newest few first, and the rest on request', async ($, on) => {
+  const tasks = [1, 2, 3, 4, 5].map(n => ({ task: `[[T-WEB-000${n}-step-${n}]]`, progress: 'done', priority: 'low',
+    phase: '', assignee: '', title: `Step ${n}` }))
+  engine(on, { tasks })
+  await start($)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ key: 'open-T-WEB-0005-step-5' })).toBeDefined()
+  expect(await ui.find({ key: 'open-T-WEB-0003-step-3' })).toBeDefined()
+  expect(await ui.find({ key: 'open-T-WEB-0002-step-2' })).toBeUndefined()
+  await ui.press({ key: 'more' })
+  expect(await ui.find({ key: 'open-T-WEB-0001-step-1' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('without the board model of projectwright the pane says what to do', async ($, on) => {
+  engine(on, { model: null })
+  await start($)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /projectwright has no assets\/board-model\.json/ })).toBeDefined()
+  await ui.unmount()
 })
 
 test('outside a projectwright project the pane says so', async ($, on) => {
@@ -127,7 +176,7 @@ test('where only "python" answers, the scripts run with it', async ($, on) => {
   await start($)
 
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-  expect(await ui.find({ type: 'Text', text: /IN PROGRESS/ })).toBeDefined()
+  expect(await ui.find({ key: 'open-T-WEB-0001-checkout-page' })).toBeDefined()
   expect(ran[0]?.[0]).toBe('python')
   await ui.unmount()
 })
@@ -137,7 +186,7 @@ test('from a subfolder of the project the pane still finds the tasks', async ($,
   await start($, '/project/repositories/web')
 
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-  expect(await ui.find({ type: 'Text', text: /IN PROGRESS/ })).toBeDefined()
+  expect(await ui.find({ key: 'open-T-WEB-0001-checkout-page' })).toBeDefined()
   expect(ran[0]).toContain('/project')
   await ui.unmount()
 })
@@ -168,6 +217,7 @@ test('the inject button hands the task to Claude, on open and closed tasks alike
 
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   await ui.press({ key: 'inject-T-WEB-0001-checkout-page' })
+  await ui.press({ key: 'column-done' })
   await ui.press({ key: 'inject-T-WEB-0003-cart' })
   expect(sent.length).toBe(2)
   expect(sent[0]).toContain('Bring task T-WEB-0001 (T-WEB-0001-checkout-page) into context.')
@@ -189,9 +239,12 @@ test('pressing a task opens its detail in place of the list, and Back returns', 
   expect(await ui.find({ type: 'Text', text: /The customer's checkout page/ })).toBeDefined()
   expect(await ui.find({ key: 'link-T-WEB-0002-payment-step' })).toBeDefined()
   expect(await ui.find({ key: 'inject-T-WEB-0001-checkout-page' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /TO DO/ })).toBeUndefined()
+  // its properties, named and drawn as the model says
+  expect(await ui.find({ type: 'Text', text: /^Status$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^ In progress $/ })).toBeDefined()
+  expect(await ui.find({ key: 'column-todo' })).toBeUndefined()
   await ui.press({ key: 'back' })
-  expect(await ui.find({ type: 'Text', text: /TO DO/ })).toBeDefined()
+  expect(await ui.find({ key: 'column-todo' })).toBeDefined()
   expect(written.length).toBe(0)
   await ui.unmount()
 })
@@ -279,11 +332,12 @@ test('while the pane is shown it looks at the wiki every 30 seconds, for changes
   await start($)
 
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-  expect(await ui.find({ type: 'Text', text: /DONE/ })).toBeUndefined()
+  await ui.press({ key: 'column-done' })
+  expect(await ui.find({ key: 'open-T-WEB-0001-checkout-page' })).toBeUndefined()
   // someone closes a task in an editor
   tasks = TASKS.map(t => (t.task === '[[T-WEB-0001-checkout-page]]' ? { ...t, progress: 'done' } : t))
   await clock.advance(30_000)
-  expect(await ui.find({ type: 'Text', text: /DONE/ })).toBeDefined()
+  expect(await ui.find({ key: 'open-T-WEB-0001-checkout-page' })).toBeDefined()
   await ui.unmount()
 })
 

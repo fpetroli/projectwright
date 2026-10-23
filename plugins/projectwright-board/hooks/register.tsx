@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Applying, Board, Draft, Edit, Fields, Pending, Selected, Task, TaskDetail } from '../types'
+import type { Applying, Board, Draft, Edit, Fields, Model, Pending, Selected, Task, TaskDetail, View } from '../types'
 
 import { touchesWiki } from './paths'
 
@@ -16,27 +16,23 @@ const selected = atom({ plugin: 'projectwright-board', key: 'selected' } as cons
 const NO_EDIT: Edit = { bodyChange: '' }
 const edit = atom({ plugin: 'projectwright-board', key: 'edit' } as const, NO_EDIT)
 const applying = atom({ plugin: 'projectwright-board', key: 'applying' } as const, {} as Applying)
+const NO_VIEW: View = { expanded: [] }
+const view = atom({ plugin: 'projectwright-board', key: 'view' } as const, NO_VIEW)
 
-// Columns of the pane, in the order a task moves through them. Colors are
-// theme keys, so they follow the person's light or dark theme.
-const COLUMNS = ['in-progress', 'blocked', 'todo', 'done', 'cancelled']
-const STATE: Record<string, { label: string; mark: string; color: string }> = {
-  'in-progress': { label: 'In progress', mark: '▶', color: 'suggestion' },
-  blocked: { label: 'Blocked', mark: '■', color: 'error' },
-  todo: { label: 'To do', mark: '○', color: 'text' },
-  done: { label: 'Done', mark: '✓', color: 'success' },
-  cancelled: { label: 'Cancelled', mark: '✗', color: 'inactive' },
-}
-const MARK = (progress: string) => STATE[progress]?.mark ?? '·'
-const PRIORITY: Record<string, { mark: string; color: string }> = {
-  high: { mark: '▲ high', color: 'error' },
-  medium: { mark: '● medium', color: 'warning' },
-  low: { mark: '▽ low', color: 'subtle' },
-}
-// Tasks being worked on get a card; the others a single row.
-const FOCUS = ['in-progress', 'blocked']
-// Done and cancelled tasks are history: the pane shows only the latest few.
-const HISTORY = 3
+// What a board shows — columns, labels, colors, the fields of a card — is
+// defined once in projectwright (assets/board-model.json), for board.html and
+// this pane alike. The pane turns its color names into theme keys, so they
+// follow the person's light or dark theme.
+const MODEL = 'assets/board-model.json'
+const COLOR: Record<string, string> = { blue: 'suggestion', red: 'error', gray: 'inactive', green: 'success', yellow: 'warning' }
+const colorOf = (name?: string) => COLOR[name ?? ''] ?? 'text'
+const columnOf = (model: Model, progress: string) =>
+  model.columns.find(c => c.progress === progress) ?? { progress, label: progress, color: '' }
+const priorityOf = (model: Model, value: string) => model.priorities.find(p => p.value === value)
+// "a, b" as the list JSON prints a list field; the detail keeps it a list of links.
+const namesIn = (v: unknown) => (Array.isArray(v) ? v.map(String) : String(v ?? '').split(','))
+  .map(s => s.trim().replace(/^\[\[|\]\]$/g, '').replace(/\|.*$/, '')).filter(Boolean)
+const idOf = (n: string) => /^(T-[A-Z0-9]+-\d+)/.exec(n)?.[1] ?? n
 
 const now = () => new Date().toTimeString().slice(0, 5)
 
@@ -105,10 +101,16 @@ const load = async ($: EngineInterface): Promise<Board> => {
   try {
     const { dir, error } = await projectwright($, root)
     if (dir === undefined) return { tasks: [], error }
+    let model: Model
+    try {
+      model = JSON.parse(await $.fs.read(`${dir}/${MODEL}`)) as Model
+    } catch {
+      return { tasks: [], error: `projectwright has no ${MODEL}: update the two plugins together.` }
+    }
     const ran = await runScript($, root, dir, 'wiki-query.py', ['tasks', '--format', 'json'])
     if (ran.exitCode !== 0) return { tasks: [], error: ran.stderr.trim() || 'wiki-query failed.' }
     const tasks = JSON.parse(ran.stdout) as Task[]
-    return { tasks, updated: now() }
+    return { tasks, model, updated: now() }
   } catch (err) {
     return { tasks: [], error: String(err) }
   }
@@ -117,7 +119,8 @@ const load = async ($: EngineInterface): Promise<Board> => {
 const name = (t: Task) => t.task.replace(/^\[\[|\]\]$/g, '')
 
 // What a refresh compares: the tasks or the error, not the time it was read.
-const sameBoard = (a: Board, b: Board) => a.error === b.error && JSON.stringify(a.tasks) === JSON.stringify(b.tasks)
+const sameBoard = (a: Board, b: Board) => a.error === b.error && JSON.stringify(a.tasks) === JSON.stringify(b.tasks) &&
+  JSON.stringify(a.model) === JSON.stringify(b.model)
 
 const refresh = async ($: EngineInterface) => {
   const next = await load($)
@@ -204,12 +207,26 @@ const split = (t: Task) => {
   return { id: m?.[1] ?? name(t), title: t.title || fallback }
 }
 
-// One bar for the whole board: a segment per state, as long as its share.
-const bar = (tasks: Task[], width: number) =>
-  COLUMNS.map(progress => {
-    const n = tasks.filter(t => t.progress === progress).length
-    return { progress, cells: n === 0 ? 0 : Math.max(1, Math.round((n / tasks.length) * width)) }
+// One bar for the whole board: a segment per column, as long as its share.
+const bar = (model: Model, tasks: Task[], width: number) =>
+  model.columns.map(c => {
+    const n = tasks.filter(t => t.progress === c.progress).length
+    return { color: c.color, cells: n === 0 ? 0 : Math.max(1, Math.round((n / tasks.length) * width)) }
   }).filter(s => s.cells > 0)
+
+// The columns shown: all of them, save those the model hides while empty.
+const columnsShown = (model: Model, tasks: Task[]) => model.columns.filter(c =>
+  !model.hide_when_empty.includes(c.progress) || tasks.some(t => t.progress === c.progress))
+
+// The tasks of a column in the model's order: by ID, the history newest first
+// and, unless expanded, only the latest few.
+const columnTasks = (model: Model, tasks: Task[], progress: string, isExpanded: boolean) => {
+  const items = tasks.filter(t => t.progress === progress)
+  const isHistory = model.history.columns.includes(progress)
+  const ordered = isHistory && model.history.newest_first ? [...items].reverse() : items
+  const shown = isHistory && !isExpanded ? ordered.slice(0, model.history.shown) : ordered
+  return { items: ordered, shown }
+}
 
 // The pane never writes the wiki. Whatever the person does in it becomes a
 // request to Claude, which changes the wiki through the projectwright skills,
@@ -304,19 +321,19 @@ export const register: Register = on => {
   on('command.run', { command: 'board' }, async $ => {
     await refresh($)
     const opened = await $.ui.open({ id: PANE, title: 'Board' })
-    const { tasks, error } = await read($, board)
+    const { tasks, model, error } = await read($, board)
     const surfaces = (await $.session.surfaces()).join(', ') || 'none'
     const pane = opened.isPlaced ? 'pane opened' : `pane not drawn (${opened.reason})`
 
     // The same list as text: the command's output reaches every surface,
     // the remote ones that draw no pane included.
-    const lines = error
-      ? [error]
-      : COLUMNS.flatMap(progress => {
-          const group = tasks.filter(t => t.progress === progress)
+    const lines = error || !model
+      ? [error ?? 'The board has not read the wiki yet.']
+      : model.columns.flatMap(c => {
+          const group = tasks.filter(t => t.progress === c.progress)
           return group.length === 0
             ? []
-            : [`${MARK(progress)} ${progress} (${group.length})`,
+            : [`● ${c.label} (${group.length})`,
                 ...group.map(t => `   ${split(t).id} ${split(t).title}`.trimEnd())]
         })
 
@@ -334,12 +351,19 @@ export const register: Register = on => {
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const elements = $.ui.resolve(e)
     const { Box, Text, Button } = elements
-    const { tasks, error, updated } = await read($, board)
+    const { tasks, model, error, updated } = await read($, board)
     const form = await read($, draft)
     const sent = (await read($, pending)) ?? []
     const width = Math.max(10, e.props.bodyColumns - 2)
 
     if (error) return <Text color="error">{error}</Text>
+    if (!model) return <Text dimColor>Reading the wiki…</Text>
+
+    // A value of the model as a chip: its label on its color, in either theme.
+    const chip = (label: string, color: string, key: string) => (
+      <Text key={key} color={colorOf(color)} inverse> {label} </Text>
+    )
+    const priorityOptions = model.priorities.map(p => ({ value: p.value, label: p.label }))
 
     // The new-task form: closed, one button; open, title, priority, notes.
     // The mobile app has no text field or select: there the button is all.
@@ -358,9 +382,7 @@ export const register: Register = on => {
         <Input key="title" label="Title" placeholder="what has to be done" value={form.title} autoFocus
           onInput={title => setDraft({ title })}
           onSubmit={title => void createTask($, { ...form, title })} />
-        <Select key="priority" label="Priority" value={form.priority}
-          options={[{ value: 'high', label: '▲ high' }, { value: 'medium', label: '● medium' },
-            { value: 'low', label: '▽ low' }]}
+        <Select key="priority" label="Priority" value={form.priority} options={priorityOptions}
           onSelect={priority => setDraft({ priority })} />
         <Input key="notes" label="Notes" placeholder="optional: context for Claude" rows={2}
           value={form.notes} onInput={notes => setDraft({ notes })}
@@ -412,10 +434,25 @@ export const register: Register = on => {
       const t = tasks.find(x => name(x) === shown.name) ??
         { task: `[[${shown.name}]]`, progress: '', priority: '', phase: '', assignee: '' }
       const d = shown.data
-      const state = STATE[String(d?.progress ?? t.progress)]
-      const priority = PRIORITY[String(d?.priority ?? t.priority)]
       const { id } = split(t)
       const field = (key: string) => (d && typeof d[key] === 'string' ? (d[key] as string) : '')
+      // One property of the model, as board.html draws it beside the task.
+      const property = (f: string) => {
+        const progress = field('progress') || t.progress
+        const priority = priorityOf(model, field('priority') || t.priority)
+        const blockers = namesIn(d?.blocked_by ?? t.blocked_by)
+        const value = f === 'progress' ? (progress && chip(columnOf(model, progress).label, columnOf(model, progress).color, 'v'))
+          : f === 'priority' ? (priority && chip(priority.label, priority.color, 'v'))
+          : f === 'blocked_by' ? (blockers.length > 0 && <Text key="v" color="error">{blockers.map(idOf).join(', ')}</Text>)
+          : (field(f) && <Text key="v" wrap="wrap">{field(f)}</Text>)
+        if (!value) return undefined
+        return (
+          <Box key={`prop-${f}`} flexDirection="row" gap={1}>
+            <Box width={12} flexShrink={0}><Text color="subtle">{model.fields[f] ?? f}</Text></Box>
+            <Box flexShrink={1}>{value}</Box>
+          </Box>
+        )
+      }
       const Markdown = 'Markdown' in elements ? elements.Markdown : undefined
       // The note's own heading repeats the title drawn above; wikilinks read as names.
       const body = (d?.body ?? '').replace(/^# .*\n+/, '').replace(/\[\[([^\]|]+)(\|[^\]]*)?\]\]/g, '$1')
@@ -448,10 +485,9 @@ export const register: Register = on => {
               <Text bold color="claude">✎ Editing {id}</Text>
               {text('title', 'Title')}
               <Select key="edit-progress" label="Progress" value={values.progress}
-                options={COLUMNS.map(p => ({ value: p, label: `${MARK(p)} ${p}` }))}
+                options={model.columns.map(c => ({ value: c.progress, label: c.label }))}
                 onSelect={progress => set({ progress })} />
-              <Select key="edit-priority" label="Priority" value={values.priority}
-                options={Object.entries(PRIORITY).map(([value, p]) => ({ value, label: p.mark }))}
+              <Select key="edit-priority" label="Priority" value={values.priority} options={priorityOptions}
                 onSelect={priority => set({ priority })} />
               {text('phase', 'Phase')}
               {text('assignee', 'Assignee (a role)')}
@@ -500,16 +536,11 @@ export const register: Register = on => {
               <Button key="dismiss-applying" dimColor onPress={() => void update($, applying, () => ({}))}>✕</Button>
             </Box>
           )}
-          <Text bold color={state?.color ?? 'text'}>
-            {state?.mark ?? '·'} {id}  <Text dimColor>{field('progress') || t.progress}</Text>
-            {priority && <Text color={priority.color}>  {priority.mark}</Text>}
-          </Text>
+          <Text dimColor>{id}</Text>
           <Text bold wrap="wrap">{field('title') || split(t).title}</Text>
-          <Text color="subtle" wrap="wrap">
-            {[field('assignee') && `@${field('assignee')}`, field('phase'),
-              field('updated') && `updated ${field('updated')}`, field('closed_on') && `closed ${field('closed_on')}`]
-              .filter(Boolean).join(' · ')}
-          </Text>
+          <Box flexDirection="column" marginTop={1}>
+            {model.detail.map(property)}
+          </Box>
           <Text dimColor>{'─'.repeat(width)}</Text>
           {shown.error && <Text color="error" wrap="wrap">{shown.error}</Text>}
           {!d && !shown.error && <Text dimColor>Loading…</Text>}
@@ -532,50 +563,62 @@ export const register: Register = on => {
       )
     }
 
-    // Pressing a task's id or title opens its detail.
-    const opener = (t: Task, children: unknown, isHistory = false) => (
-      <Button key={`open-${name(t)}`} plain dimColor={isHistory} onPress={() => void openTask($, name(t))}>
+    // Pressing a task's title opens its detail.
+    const opener = (t: Task, children: unknown) => (
+      <Button key={`open-${name(t)}`} plain onPress={() => void openTask($, name(t))}>
         {children as string}
       </Button>
     )
 
-    // A task being worked on: id and priority, title, assignee, in its state's frame.
-    const card = (t: Task, color: string) => {
-      const { id, title } = split(t)
-      const priority = PRIORITY[t.priority]
-      return (
-        <Box key={name(t)} flexDirection="column" borderStyle="round" borderColor={color} paddingX={1}>
-          <Box flexDirection="row" justifyContent="space-between">
-            <Text bold color={color}>{id}{t.assignee && <Text color="subtle"> @{t.assignee}</Text>}</Text>
-            <Box flexDirection="row" gap={1}>
-              {priority && <Text color={priority.color}>{priority.mark}</Text>}
-              {inject(t)}
-            </Box>
-          </Box>
-          {opener(t, title)}
-        </Box>
-      )
+    // One field of a card, as the model lists them and board.html draws them.
+    const cardField = (t: Task, f: string) => {
+      const priority = priorityOf(model, t.priority)
+      const blockers = namesIn(t.blocked_by)
+      if (f === 'id') return <Text key={f} dimColor>{split(t).id}</Text>
+      if (f === 'priority') return priority && chip(priority.label, priority.color, f)
+      if (f === 'assignee') return t.assignee && <Text key={f} color="subtle">@{t.assignee}</Text>
+      if (f === 'blocked_by') return blockers.length > 0 && chip(`Blocked by ${blockers.map(idOf).join(', ')}`, 'red', f)
+      const value = t[f as keyof Task]
+      return value && <Text key={f} color="subtle">{String(value)}</Text>
     }
 
-    // Any other task: one row, the priority as a mark before the title.
-    const row = (t: Task, isHistory: boolean) => {
-      const { id, title } = split(t)
-      const priority = PRIORITY[t.priority]
-      const room = Math.max(4, width - id.length - 12)
-      const short = title.length > room ? `${title.slice(0, room - 1)}…` : title
-      return (
-        <Box key={name(t)} flexDirection="row" justifyContent="space-between" gap={1}>
-          <Text>
-            {'  '}<Text color={isHistory ? 'inactive' : priority?.color ?? 'text'}>{priority?.mark.charAt(0) ?? '·'}</Text>
-          </Text>
-          <Box flexGrow={1} flexShrink={1}>
-            {opener(t, [<Text bold={!isHistory}>{id}</Text>, ' ',
-              <Text strikethrough={t.progress === 'cancelled'}>{short}</Text>], isHistory)}
+    // A task: its title, then the other fields of the card, in its column's frame.
+    const card = (t: Task, color: string) => (
+      <Box key={name(t)} flexDirection="column" borderStyle="round" borderColor={colorOf(color)} paddingX={1}>
+        <Box flexDirection="row" justifyContent="space-between" gap={1}>
+          <Box flexShrink={1}>
+            {opener(t, <Text bold strikethrough={t.progress === 'cancelled'} wrap="wrap">{split(t).title}</Text>)}
           </Box>
           {inject(t)}
         </Box>
-      )
-    }
+        <Box flexDirection="row" flexWrap="wrap" columnGap={1}>
+          {model.card.filter(f => f !== 'title').map(f => cardField(t, f))}
+        </Box>
+      </Box>
+    )
+
+    // One column at a time: the columns as tabs with their count, a digit for each.
+    const columns = columnsShown(model, tasks)
+    const shownView = await read($, view)
+    const current = columns.find(c => c.progress === shownView.column) ??
+      columns.find(c => tasks.some(t => t.progress === c.progress)) ?? columns[0]
+    const tabs = (
+      <Box flexDirection="row" flexWrap="wrap" columnGap={2} marginBottom={1}>
+        {columns.map((c, i) => {
+          const n = tasks.filter(t => t.progress === c.progress).length
+          return (
+            <Button key={`column-${c.progress}`} plain hotkey={i < 9 ? String(i + 1) : undefined}
+              onPress={() => void update($, view, v => ({ ...(v ?? NO_VIEW), column: c.progress }))}>
+              {c.progress === current?.progress
+                ? <Text color={colorOf(c.color)} inverse bold> ● {c.label} {n} </Text>
+                : <Text color={colorOf(c.color)}>{c.label} <Text dimColor>{n}</Text></Text>}
+            </Button>
+          )
+        })}
+      </Box>
+    )
+    const isExpanded = current !== undefined && shownView.expanded.includes(current.progress)
+    const group = current ? columnTasks(model, tasks, current.progress, isExpanded) : { items: [], shown: [] }
 
     return (
       <Box flexDirection="column">
@@ -591,31 +634,22 @@ export const register: Register = on => {
               <Text color="success">{done}/{tasks.length} done</Text>
             </Box>
             <Box flexDirection="row" marginBottom={1}>
-              {bar(tasks, width).map(s => (
-                <Text color={STATE[s.progress]?.color ?? 'text'}>{'━'.repeat(s.cells)}</Text>
+              {bar(model, tasks, width).map(s => (
+                <Text color={colorOf(s.color)}>{'━'.repeat(s.cells)}</Text>
               ))}
             </Box>
-            {COLUMNS.map(progress => {
-              const group = tasks.filter(t => t.progress === progress)
-              if (group.length === 0) return undefined
-              const state = STATE[progress] ?? { label: progress, mark: '·', color: 'text' }
-              const isHistory = progress === 'done' || progress === 'cancelled'
-              const shown = isHistory ? group.slice(-HISTORY) : group
-              return (
-                <Box key={progress} flexDirection="column" marginBottom={1}>
-                  <Text bold color={state.color}>
-                    {state.mark} {state.label.toUpperCase()} <Text dimColor>{group.length}</Text>
-                  </Text>
-                  {shown.map(t => (FOCUS.includes(progress) ? card(t, state.color) : row(t, isHistory)))}
-                  {shown.length < group.length && (
-                    <Text dimColor>  … {group.length - shown.length} more</Text>
-                  )}
-                </Box>
-              )
-            })}
+            {tabs}
+            {group.items.length === 0 && <Text dimColor>No tasks in {current?.label ?? 'this column'}.</Text>}
+            {group.shown.map(t => card(t, current?.color ?? ''))}
+            {group.shown.length < group.items.length && (
+              <Button key="more" dimColor plain
+                onPress={() => void update($, view, v => ({ ...(v ?? NO_VIEW), expanded: [...(v?.expanded ?? []), current?.progress ?? ''] }))}>
+                + {group.items.length - group.shown.length} more
+              </Button>
+            )}
           </Box>
         )}
-        <Text dimColor>{updated ? `updated ${updated} · ` : ''}n new task · /board refresh</Text>
+        <Text dimColor>{updated ? `updated ${updated} · ` : ''}1–{Math.min(columns.length, 9)} column · n new task · /board refresh</Text>
       </Box>
     )
   })

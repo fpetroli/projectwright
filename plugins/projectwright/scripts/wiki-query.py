@@ -157,7 +157,9 @@ Q_COLS = [("question", link), ("gate", "gate"), ("status", "status"), ("assumpti
 D_COLS = [("decision", link), ("status", "status"), ("area", "area"), ("updated", "updated")]
 T_COLS = [("task", link), ("progress", "progress"), ("priority", "priority"), ("phase", "phase"),
           ("assignee", "assignee")]
-T_JSON_COLS = T_COLS + [("title", "title")]  # JSON is read by programs: the title too
+# JSON is read by programs (the boards): the title and the fields of a card too
+T_JSON_COLS = T_COLS + [("title", "title"), ("id", "id"), ("updated", "updated"), ("closed_on", "closed_on"),
+                        ("blocked_by", lambda r: ", ".join(pwlib.links_in(r.get("blocked_by"))))]
 S_COLS = [("document", "document"), ("card", "card"), ("ingested_on", "ingested_on"),
           ("result", "result"), ("integrated", "integrated")]
 
@@ -182,6 +184,17 @@ def cmd_tasks(root, project, args):
     return render(rows, T_JSON_COLS if args.format == "json" else T_COLS, args.format)
 
 
+def task_detail(root, r):
+    """A task record in full, as `task --format json` prints it and board.html reads it."""
+    _fm, _err, text = pwlib.read_frontmatter(Path(root) / r["_path"])
+    body = pwlib.body_of(text)
+    links = []
+    for value in [v for k, v in r.items() if not k.startswith("_")] + [body]:
+        links += [n for n in pwlib.links_in(value) if n not in links and n != r["_name"]]
+    fields = {k: pwlib.plain(v) for k, v in r.items() if not k.startswith("_")}
+    return dict(fields, name=r["_name"], path=r["_path"], component=r["_component"], body=body, links=links)
+
+
 def cmd_task(root, project, args):
     """One task in full: every frontmatter field, its body and the notes it links."""
     wanted = (args.name or "").strip().removeprefix("[[").removesuffix("]]")
@@ -192,15 +205,11 @@ def cmd_task(root, project, args):
     if not found:
         raise NotFound("task not found: %s" % wanted)
     r = found[0]
-    _fm, _err, text = pwlib.read_frontmatter(Path(root) / r["_path"])
-    body = pwlib.body_of(text)
-    links = []
-    for value in [v for k, v in r.items() if not k.startswith("_")] + [body]:
-        links += [n for n in pwlib.links_in(value) if n not in links and n != r["_name"]]
-    fields = {k: pwlib.plain(v) for k, v in r.items() if not k.startswith("_")}
+    detail = task_detail(root, r)
     if args.format == "json":
-        detail = dict(fields, name=r["_name"], path=r["_path"], component=r["_component"], body=body, links=links)
         return json.dumps(detail, ensure_ascii=False, indent=2)
+    body = detail["body"]
+    fields = {k: pwlib.plain(v) for k, v in r.items() if not k.startswith("_")}
     head = ["%s: %s" % (k, ", ".join(map(str, v)) if isinstance(v, list) else ("" if v is None else v))
             for k, v in fields.items()]
     if args.format == "md":

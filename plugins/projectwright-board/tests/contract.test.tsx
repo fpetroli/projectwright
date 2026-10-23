@@ -1,10 +1,10 @@
 import { expect, test } from 'claude-code/testing'
 
-import { DETAILS, TASKS } from './contract/contract'
+import { DETAILS, MODEL, TASKS } from './contract/contract'
 
-// The board on the real output of the projectwright scripts (contract/contract.ts,
-// written by contract/make_contract.py). When the scripts change their output,
-// these tests say whether the board still reads it.
+// The board on the real output of the projectwright scripts and on the real
+// board model (contract/contract.ts, written by contract/make_contract.py). When
+// the scripts or the model change, these tests say whether the board still reads them.
 
 const PANE = {
   plugin: 'projectwright-board',
@@ -32,8 +32,10 @@ const engine = (on: any) => {
   on('session.start', (_: unknown, e: any) => ({ cwd: e.cwd }))
   on('session.cwd', () => ({ value: '/project' }))
   on('fs.exists', () => ({ value: true }))
-  on('fs.read', (_: unknown, e: any) =>
-    ({ value: e.path.endsWith('/.projectwright-plugin') ? '/plugin\n' : JSON.stringify({ version: '0.2.0' }) }))
+  on('fs.read', (_: unknown, e: any) => ({
+    value: e.path.endsWith('/.projectwright-plugin') ? '/plugin\n'
+      : e.path === '/plugin/assets/board-model.json' ? JSON.stringify(MODEL) : JSON.stringify({ version: '0.2.0' }),
+  }))
   on('process.run', (_: unknown, e: any) => {
     const argv = [...e.argv] as string[]
     const detail = argv[2] === 'task' ? DETAILS[argv[3] ?? ''] : undefined
@@ -53,7 +55,24 @@ test('the list output has the fields the board reads', () => {
       expect(typeof t[field]).toBe('string')
     }
     expect(String(t.task)).toMatch(/^\[\[T-[A-Z0-9]+-\d+-.+\]\]$/)
+    // the fields of a card
+    for (const field of ['id', 'updated', 'closed_on', 'blocked_by']) expect(typeof t[field]).toBe('string')
   }
+  const blocked = TASKS.find(t => t.progress === 'blocked')
+  expect(blocked?.blocked_by).toBe('T-WEB-0002-payment-step')
+})
+
+test('the model has a column for every progress and the fields the board draws', () => {
+  const columns = MODEL.columns as { progress: string; label: string; color: string }[]
+  for (const t of TASKS) expect(columns.map(c => c.progress)).toContain(String(t.progress))
+  for (const c of columns) for (const key of ['progress', 'label', 'color'] as const) expect(typeof c[key]).toBe('string')
+  for (const p of MODEL.priorities as { value: string; label: string; color: string }[]) expect(typeof p.label).toBe('string')
+  const fields = MODEL.fields as Record<string, string>
+  for (const list of ['card', 'table', 'detail']) {
+    for (const f of MODEL[list] as string[]) expect(typeof fields[f]).toBe('string')
+  }
+  const history = MODEL.history as { columns: string[]; shown: number }
+  expect(history.shown).toBeGreaterThan(0)
 })
 
 test('the detail output has the fields the board reads', () => {
@@ -66,17 +85,24 @@ test('the detail output has the fields the board reads', () => {
   }
 })
 
-test('every task of the sample project is drawn, under a heading the board knows', async ($, on) => {
+// The pane shows one column at a time: a task is drawn once its column is chosen.
+const showColumnOf = async (ui: any, name: string) => {
+  const t = TASKS.find(x => x.task === `[[${name}]]`)
+  await ui.press({ key: `column-${String(t?.progress)}` })
+}
+
+test('every task of the sample project is drawn, in a column of the model', async ($, on) => {
   engine(on)
   await $.session.start({ cwd: '/project', surface: 'terminal', isInteractive: true })
 
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-  for (const heading of [/IN PROGRESS/, /BLOCKED/, /TO DO/, /DONE/, /CANCELLED/]) {
-    expect(await ui.find({ type: 'Text', text: heading })).toBeDefined()
+  for (const c of MODEL.columns as { progress: string; label: string }[]) {
+    expect(await ui.find({ key: `column-${c.progress}` })).toBeDefined()
   }
-  for (const t of TASKS) {
-    const name = String(t.task).replace(/^\[\[|\]\]$/g, '')
-    expect((await ui.find({ key: `open-${name}` }))?.text).toContain(String(t.title))
+  for (const name of names) {
+    const t = TASKS.find(x => x.task === `[[${name}]]`)
+    await showColumnOf(ui, name)
+    expect((await ui.find({ key: `open-${name}` }))?.text).toContain(String(t?.title))
   }
   await ui.unmount()
 })
@@ -88,6 +114,7 @@ test('every task opens its detail from the real output, with its title and linke
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   for (const name of names) {
     const d = DETAILS[name] ?? {}
+    await showColumnOf(ui, name)
     await ui.press({ key: `open-${name}` })
     expect(await ui.find({ type: 'Text', text: String(d.title) })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /not found|failed/ })).toBeUndefined()
@@ -106,6 +133,7 @@ test('an edit starts from the values in the wiki', async ($, on) => {
   const name = 'T-WEB-0003-order-history'
   const d = DETAILS[name] ?? {}
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await showColumnOf(ui, name)
   await ui.press({ key: `open-${name}` })
   await ui.press({ key: 'edit' })
   await ui.select({ key: 'edit-progress', value: 'todo' })

@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""board — writes board.html, a read-only view of the whole brain repository.
+"""board — writes board.html, a read-only view of the tasks of the wiki.
 
-Reads the wiki (frontmatter and body of every record), the ingestion log and
-project.yaml, and writes them into the layout assets/board.html of the plugin.
+Reads the tasks of the wiki (frontmatter and body) and project.yaml, and writes
+them into the layout assets/board.html of the plugin, with the definition of
+what a board shows (assets/board-model.json, shared with projectwright-board).
 The result, board.html in the project root, is a single self-contained file
 (no network, no external libraries) to open in a browser. It is generated: it is
 never edited and never versioned (it is in .gitignore).
@@ -25,12 +26,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import pwlib  # noqa: E402
 
 LAYOUT = pwlib.PLUGIN_DIR / "assets" / "board.html"
+MODEL = pwlib.PLUGIN_DIR / "assets" / "board-model.json"
 OUTPUT = "board.html"
 PLACEHOLDER = "/*__BOARD_DATA__*/"
-LINK_FIELDS = ["related", "decisions", "questions", "blocked_by", "superseded_by", "decision", "source"]
-SCALAR_FIELDS = ["title", "type", "id", "status", "area", "lifecycle", "gate", "assumption", "precaution",
-                 "decision_owner", "progress", "priority", "phase", "assignee", "created", "updated", "closed_on",
-                 "code", "component_status", "repository", "upstream"]
 
 
 def load_script(name, filename):
@@ -41,52 +39,17 @@ def load_script(name, filename):
 
 
 def collect(root, project):
+    """The tasks of the wiki, in full, as `wiki-query.py task --format json` gives them to the pane."""
     query = load_script("wiki_query_mod", "wiki-query.py")
-    records = []
-    for r in query.records(root, project):
-        text = (Path(root) / r["_path"]).read_text(encoding="utf-8", errors="replace")
-        rec = {"name": r["_name"], "path": r["_path"], "component": r["_component"], "body": pwlib.body_of(text)}
-        for f in SCALAR_FIELDS:
-            if f in r and r[f] not in (None, ""):
-                rec[f] = pwlib.plain(r[f])
-        links = {}
-        for f in LINK_FIELDS:
-            names = pwlib.links_in(r.get(f))
-            if names:
-                links[f] = names
-        rec["links"] = links
-        records.append(rec)
-
-    notes = {r["name"]: r for r in records if r.get("type") == "component"}
-    components = [{"name": c.get("name"), "code": c.get("code"),
-                   "status": (notes.get(c.get("name")) or {}).get("component_status", "(entry note missing)")}
-                  for c in (pwlib.get(project, "components") or []) if isinstance(c, dict)]
-    sources = query.read_log(root)
-
-    summary = {"pending_cards": sum(1 for s in sources if s.get("integrated") == "no")}
-    try:
-        lint = load_script("wiki_lint_mod", "wiki-lint.py")
-        summary["lint"] = len(lint.lint(root, project, pwlib.load_schema()))
-    except Exception:
-        summary["lint"] = None
-    try:
-        files, adrs, uncovered = query.deviations(root, project)
-        if files:
-            summary["deviations"] = "%d framework file(s) changed in this project, %d without an ADR; %d deviation(s) not yet proposed." % (
-                len(files), len(uncovered), len([a for a in adrs if not a.get("upstream")]))
-    except Exception:
-        pass
-
+    tasks = [query.task_detail(root, r) for r in query.records(root, project) if r.get("type") == "task"]
+    tasks.sort(key=lambda t: t["name"])
     return {
         "project": {"name": pwlib.get(project, "project.name") or Path(root).name,
-                    "language": pwlib.get(project, "project.language"),
                     "version": pwlib.get(project, "framework.version") or "?",
                     "tasks_mode": pwlib.get(project, "tasks.mode") or "wiki",
                     "generated": datetime.datetime.now().strftime("%Y-%m-%d %H:%M")},
-        "summary": summary,
-        "records": records,
-        "components": components,
-        "sources": sources,
+        "model": json.loads(MODEL.read_text(encoding="utf-8")),
+        "tasks": tasks,
     }
 
 

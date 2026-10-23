@@ -102,7 +102,7 @@ my-shop/                              ← THE PROJECT FOLDER: the "brain" of the
 │
 ├── CLAUDE.md                         ← instructions for Claude (from the framework + a final section of yours)
 ├── project.yaml                      ← YOUR CHOICES: name, language, components, rules, conventions
-├── board.html                        ← generated view of the whole project, to open in a browser
+├── board.html                        ← generated view of the tasks, to open in a browser
 │
 ├── .claude/
 │   ├── settings.json                 ← enables the projectwright plugin for this project
@@ -231,9 +231,9 @@ All skills are invoked as `/projectwright:<name>`. You can also just ask in plai
 - **`board.html` is regenerated** at the start of the session and after every change to the wiki;
 - **before every commit** (only if the project folder is versioned), a git hook runs the full lint and blocks the commit on errors.
 
-**The board** — `board.html`, in the project folder, is a read-only view of the whole project to open in your browser: overview, a **task board** in columns (to do, in progress, blocked, done) with filters, questions by traffic light, decisions, components, sources, full-text search and the detail of every record. It works offline and is never versioned. With `/projectwright:manage-tasks` it replaces an external tracker.
+**The board** — `board.html`, in the project folder, is a read-only view of the tasks of the wiki to open in your browser, laid out like a database: a **Board** view (the pipeline in columns: in progress, blocked, to do, done) and a **Table** view (one row per task, grouped by progress), a search, and the detail of a task beside the list. It works offline, changes nothing and is never versioned. With `/projectwright:manage-tasks` it replaces an external tracker. It shows what the pane beside the chat shows (below), from the same definition.
 
-**The board beside the chat (in development)** — `projectwright-board` is an optional second plugin of this marketplace: the tasks of the wiki in a pane beside the Claude Code chat, kept up to date as the wiki changes, with the detail of a task and forms to create and edit one. Every change made from the pane goes through Claude, which applies it with `/projectwright:manage-tasks` and the lint: the pane never writes the wiki. It needs `projectwright` of the same version and does not install it; install it with `claude plugin install projectwright-board@projectwright --scope project`, then type `/board`. It is built on an early-access API of Claude Code, and a session followed through Remote Control does not show the pane: `board.html` stays the full view. Details in [`plugins/projectwright-board/README.md`](plugins/projectwright-board/README.md).
+**The board beside the chat (in development)** — `projectwright-board` is an optional second plugin of this marketplace: the tasks of the wiki in a pane beside the Claude Code chat, one column at a time, kept up to date as the wiki changes, with the detail of a task and forms to create and edit one. It shows the same columns, cards and detail as `board.html`. Every change made from the pane goes through Claude, which applies it with `/projectwright:manage-tasks` and the lint: the pane never writes the wiki. It needs `projectwright` of the same version and does not install it; install it with `claude plugin install projectwright-board@projectwright --scope project`, then type `/board`. It is built on an early-access API of Claude Code, and a session followed through Remote Control does not show the pane: use `/board` or `board.html` there. Details in [`plugins/projectwright-board/README.md`](plugins/projectwright-board/README.md).
 
 **Scripts** — in the `scripts/` folder of the plugin (its path is in `.claude/.projectwright-plugin` after the first session), plain Python with no dependencies to install. Claude and the hooks use them; you can too:
 

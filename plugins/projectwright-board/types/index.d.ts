@@ -6,10 +6,30 @@ export type Task = {
   phase: string
   assignee: string
   title?: string
+  id?: string
+  updated?: string
+  closed_on?: string
+  blocked_by?: string
 }
 
-// What the pane draws: the tasks, or why there are none to show.
-export type Board = { tasks: Task[]; error?: string; updated?: string }
+// What a board shows, as projectwright's assets/board-model.json defines it
+// for board.html and the pane alike.
+export type Model = {
+  columns: { progress: string; label: string; color: string }[]
+  hide_when_empty: string[]
+  history: { columns: string[]; shown: number; newest_first: boolean }
+  priorities: { value: string; label: string; color: string }[]
+  card: string[]
+  table: string[]
+  detail: string[]
+  fields: Record<string, string>
+}
+
+// What the pane draws: the tasks and the model, or why there are none to show.
+export type Board = { tasks: Task[]; model?: Model; error?: string; updated?: string }
+
+// The column the pane shows, and the history columns opened in full.
+export type View = { column?: string; expanded: string[] }
 
 // The new-task form, kept while the person fills it in.
 export type Draft = { isOpen: boolean; title: string; priority: string; notes: string }
@@ -45,7 +65,7 @@ export type Applying = { name?: string; sentAt?: string; sentMs?: number; before
 declare module 'claude-code' {
   interface PluginState {
     'projectwright-board': {
-      board: Board; draft: Draft; pending: Pending[]; selected: Selected; edit: Edit; applying: Applying
+      board: Board; draft: Draft; pending: Pending[]; selected: Selected; edit: Edit; applying: Applying; view: View
     }
   }
 }
