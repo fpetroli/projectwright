@@ -17,6 +17,8 @@
 #                 forbidden:  fields that must not appear;
 #                 values:     per-type restriction of a list of `values`;
 #                 id_prefix:  the TYPE part of the ID (<TYPE>-<CODE>-NNNN);
+#                 id_scope:   `project` when the number is one for the whole project and the
+#                             ID has no code (<TYPE>-NNNN); otherwise one number per code;
 #                 folder:     the folder name where records of this type live.
 #   ids:        the regular expressions of codes and IDs.
 #   project:    the rules of project.yaml:
@@ -67,7 +69,8 @@ types:
   task:
     required: [title, type, area, created, updated, id, progress]
     forbidden: [status]
-    id_prefix: T
+    id_prefix: TASK
+    id_scope: project
     folder: tasks
   source-card:
     required: [title, type, status, area, created, updated, source, hash, ingested_on, source_kind]
@@ -79,6 +82,7 @@ types:
 ids:
   code: "^[A-Z]{2,8}$"
   id: "^(?P<prefix>[A-Z]+)-(?P<code>[A-Z]{2,8})-(?P<number>[0-9]{4})$"
+  project_id: "^(?P<prefix>[A-Z]+)-(?P<number>[0-9]{4})$"
 
 project:
   required:

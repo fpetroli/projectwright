@@ -100,9 +100,11 @@ def lint(root, project, schema):
     date_fields = set(schema.get("dates", []))
     link_fields = set(schema.get("wikilinks", []))
     id_rx = re.compile(schema.get("ids", {}).get("id", r"^(?P<prefix>[A-Z]+)-(?P<code>[A-Z]{2,8})-(?P<number>[0-9]{4})$"))
+    project_id_rx = re.compile(schema.get("ids", {}).get("project_id", r"^(?P<prefix>[A-Z]+)-(?P<number>[0-9]{4})$"))
     codes = pwlib.known_codes(project)
     ids_seen = {}
     entry_notes = {}
+    tasks = {}
 
     for p in files:
         rp = pwlib.rel(root, p)
@@ -156,15 +158,16 @@ def lint(root, project, schema):
         prefix = rules.get("id_prefix")
         if prefix:
             rid = fm.get("id")
-            m = id_rx.match(str(rid or ""))
+            per_project = rules.get("id_scope") == "project"  # one number for the whole project, no code
+            m = (project_id_rx if per_project else id_rx).match(str(rid or ""))
             if not m:
-                v.append(("ids", rp, "id %r not well formed (expected %s-<CODE>-NNNN)" % (rid, prefix)))
+                v.append(("ids", rp, "id %r not well formed (expected %s-%sNNNN)" % (rid, prefix, "" if per_project else "<CODE>-")))
             else:
                 if m.group("prefix") != prefix:
                     v.append(("ids", rp, "id %s: a %s needs the prefix %s" % (rid, ftype, prefix)))
-                if m.group("code") not in codes:
+                if not per_project and m.group("code") not in codes:
                     v.append(("ids", rp, "id %s: code %s unknown" % (rid, m.group("code"))))
-                if not pwlib.empty(area) and str(area) != m.group("code"):
+                if not per_project and not pwlib.empty(area) and str(area) != m.group("code"):
                     v.append(("ids", rp, "id %s: area is %s but the code of the id is %s" % (rid, area, m.group("code"))))
                 if p.stem == rid:
                     v.append(("ids", rp, "file name needs a short title after the id: %s-<short-title>.md" % rid))
@@ -183,6 +186,8 @@ def lint(root, project, schema):
             v.append(("cards", rp, "files in wiki-sources/ are ingestion cards (type source-card)"))
         if ftype == "component":
             entry_notes[p.stem] = (rp, fm, p)
+        if ftype == "task":
+            tasks[p.stem] = (rp, fm)
 
     for rid, paths in sorted(ids_seen.items()):
         if len(paths) > 1:
@@ -213,7 +218,27 @@ def lint(root, project, schema):
     for name, (rp, _fm, p) in entry_notes.items():
         if p.parent.parent != comp_dir or p.parent.name != name:
             v.append(("components", rp, "an entry note lives in wiki/components/<name>/<name>.md"))
+    v += blocks(tasks)
     v += versioning(root, project)
+    return v
+
+
+CLOSED = ("done", "cancelled")
+
+
+def blocks(tasks):
+    """A task that an open task still blocks is blocked (constitution, tasks): never to do nor in progress.
+
+    The other way round is no violation: a blocked task whose blocker has just closed waits
+    for the user's yes to move on (principle 13)."""
+    v = []
+    for rp, fm in tasks.values():
+        if fm.get("progress") in ("blocked",) + CLOSED:
+            continue
+        still = [b for b in pwlib.links_in(fm.get("blocked_by")) if b in tasks and tasks[b][1].get("progress") not in CLOSED]
+        if still:
+            v.append(("tasks", rp, "progress %s, but %s still blocks it: move it to blocked, or take the block out of blocked_by"
+                      % (fm.get("progress"), ", ".join(still))))
     return v
 
 

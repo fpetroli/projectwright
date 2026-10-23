@@ -1,5 +1,5 @@
 {
-  "_comment": "What the two boards show, defined once: board.html (scripts/board.py) and the pane of projectwright-board read this file. Colors are names; each board turns them into its own palette. Tasks are in ID order; the history columns show the newest first.",
+  "_comment": "What the two boards show, defined once: board.html (scripts/board.py) and the pane of projectwright-board read this file. Colors are names (blue, orange, red, gray, green, yellow); each board turns them into its own palette. Tasks are in ID order; the history columns show the newest first.",
   "columns": [
     {
       "progress": "in-progress",
@@ -9,7 +9,7 @@
     {
       "progress": "blocked",
       "label": "Blocked",
-      "color": "red"
+      "color": "orange"
     },
     {
       "progress": "todo",

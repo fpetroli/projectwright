@@ -1,7 +1,7 @@
 ---
 title: <what has to be done>
 type: task
-id: T-<CODE>-NNNN
+id: TASK-NNNN                      # one number for the whole project
 area: <CODE>
 progress: todo                   # todo | in-progress | blocked | done | cancelled
 priority: medium                 # high | medium | low
@@ -16,7 +16,7 @@ blocked_by: []
 commits: []                      # hashes of the commits that closed it
 ---
 
-# T-<CODE>-NNNN — <title>
+# TASK-NNNN — <title>
 
 **Goal** — <the expected result>
 

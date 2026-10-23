@@ -19,18 +19,18 @@ const PANE = {
 } as const
 
 const TASKS = [
-  { task: '[[T-WEB-0001-checkout-page]]', progress: 'in-progress', priority: 'high', phase: 'sprint-1',
+  { task: '[[TASK-0001-checkout-page]]', progress: 'in-progress', priority: 'high', phase: 'sprint-1',
     assignee: 'frontend developer', title: 'Checkout page' },
-  { task: '[[T-WEB-0002-payment-step]]', progress: 'todo', priority: '', phase: '', assignee: '',
+  { task: '[[TASK-0002-payment-step]]', progress: 'todo', priority: '', phase: '', assignee: '',
     title: 'Payment step' },
 ]
 
 const DETAIL = {
-  name: 'T-WEB-0001-checkout-page', path: 'wiki/components/web/tasks/T-WEB-0001-checkout-page.md',
+  name: 'TASK-0001-checkout-page', path: 'wiki/components/web/tasks/TASK-0001-checkout-page.md',
   component: 'WEB', title: "The customer's checkout page", progress: 'in-progress', priority: 'high',
   phase: 'sprint-1', assignee: 'frontend developer',
-  body: '# T-WEB-0001 — Checkout page\n\n**Goal** — A checkout page that leads to [[T-WEB-0002-payment-step]].\n',
-  links: ['T-WEB-0002-payment-step', 'ADR-WEB-0003-one-page-checkout'],
+  body: '# TASK-0001 — Checkout page\n\n**Goal** — A checkout page that leads to [[TASK-0002-payment-step]].\n',
+  links: ['TASK-0002-payment-step', 'ADR-WEB-0003-one-page-checkout'],
 }
 
 type Engine = {
@@ -125,12 +125,12 @@ test('the pane groups the tasks wiki-query answers, with their titles, on every 
     const ui = await $.ui.mount({ ...PANE, surface })
     // a narrow pane lists the columns one under the other, each a group that opens and closes
     expect((await ui.find({ key: 'group-in-progress' }))?.text).toContain('In progress 1')
-    expect((await ui.find({ key: 'open-T-WEB-0001-checkout-page' }))?.text).toContain('Checkout page')
-    expect((await ui.find({ key: 'open-T-WEB-0002-payment-step' }))?.text).toContain('Payment step')
+    expect((await ui.find({ key: 'open-TASK-0001-checkout-page' }))?.text).toContain('Checkout page')
+    expect((await ui.find({ key: 'open-TASK-0002-payment-step' }))?.text).toContain('Payment step')
     await ui.press({ key: 'group-todo' })
-    expect(await ui.find({ key: 'open-T-WEB-0002-payment-step' })).toBeUndefined()
+    expect(await ui.find({ key: 'open-TASK-0002-payment-step' })).toBeUndefined()
     await ui.press({ key: 'group-todo' })
-    expect(await ui.find({ key: 'open-T-WEB-0002-payment-step' })).toBeDefined()
+    expect(await ui.find({ key: 'open-TASK-0002-payment-step' })).toBeDefined()
     await ui.unmount()
   }
   expect(ran[0]).toEqual(['python3', '/plugin/scripts/wiki-query.py', 'tasks', '--format', 'json', '--root', '/project'])
@@ -139,7 +139,7 @@ test('the pane groups the tasks wiki-query answers, with their titles, on every 
 const PROPOSED = () => [
   { id: 'P-0001', kind: 'create', summary: 'Address book', why: 'Asked at every checkout.', status: 'open',
     items: [{ title: 'Address book', priority: 'medium' }] },
-  { id: 'P-0002', kind: 'move', task: 'T-WEB-0001-checkout-page', summary: 'In progress -> Done', status: 'open',
+  { id: 'P-0002', kind: 'move', task: 'TASK-0001-checkout-page', summary: 'In progress -> Done', status: 'open',
     changes: { progress: 'done' } },
 ]
 
@@ -173,7 +173,7 @@ test('accepting a proposal asks Claude to apply it, and says so until Claude has
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   await ui.press({ key: 'accept-P-0002' })
   expect(sent.length).toBe(1)
-  expect(sent[0]).toContain('Apply the proposal “In progress -> Done” on T-WEB-0001 with /projectwright:manage-tasks.')
+  expect(sent[0]).toContain('Apply the proposal “In progress -> Done” on TASK-0001 with /projectwright:manage-tasks.')
   // the id is for Claude: only at the end, as a reference
   expect(sent[0]).toMatch(/\[ref P-0002\]$/)
   expect(written.length).toBe(0)
@@ -225,7 +225,7 @@ test('the cards of the proposals never show their ids', async ($, on) => {
 
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   expect(await ui.find({ type: 'Text', text: /P-000/ })).toBeUndefined()
-  expect(await ui.find({ type: 'Text', text: /T-WEB-0001/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /TASK-0001/ })).toBeDefined()
   await ui.unmount()
 })
 
@@ -323,20 +323,40 @@ test('a reminder becomes a task through Claude, as a proposal', async ($, on) =>
   await ui.unmount()
 })
 
+test('a project not yet renumbered still shows its task ids', async ($, on) => {
+  engine(on, { tasks: [{ task: '[[T-WEB-0007-old-cart]]', progress: 'todo', priority: 'low', phase: '', assignee: '', title: 'Old cart' }] })
+  await start($)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: 'T-WEB-0007' })).toBeDefined()
+  expect((await ui.find({ key: 'open-T-WEB-0007-old-cart' }))?.text).toContain('Old cart')
+  await ui.unmount()
+})
+
+test('a closed task blocks no more: the card does not show it', async ($, on) => {
+  const tasks = [{ ...TASKS[0], blocked_by: 'TASK-0002-payment-step' }, { ...TASKS[1], progress: 'done' }]
+  engine(on, { tasks })
+  await start($)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /Blocked by/ })).toBeUndefined()
+  await ui.unmount()
+})
+
 test('a card shows the fields of the model: priority, assignee, what blocks it', async ($, on) => {
-  const tasks = [{ ...TASKS[0], id: 'T-WEB-0001', blocked_by: 'T-WEB-0002-payment-step' }, TASKS[1]]
+  const tasks = [{ ...TASKS[0], id: 'TASK-0001', blocked_by: 'TASK-0002-payment-step' }, TASKS[1]]
   engine(on, { tasks })
   await start($)
 
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   expect(await ui.find({ type: 'Text', text: /^ High $/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /@frontend developer/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /Blocked by T-WEB-0002/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Blocked by TASK-0002/ })).toBeDefined()
   await ui.unmount()
 })
 
 test('done tasks start closed in the list, then show the newest few first, and the rest on request', async ($, on) => {
-  const tasks = [1, 2, 3, 4, 5].map(n => ({ task: `[[T-WEB-000${n}-step-${n}]]`, progress: 'done', priority: 'low',
+  const tasks = [1, 2, 3, 4, 5].map(n => ({ task: `[[TASK-000${n}-step-${n}]]`, progress: 'done', priority: 'low',
     phase: '', assignee: '', title: `Step ${n}` }))
   engine(on, { tasks })
   await start($)
@@ -345,32 +365,32 @@ test('done tasks start closed in the list, then show the newest few first, and t
   // one column with tasks fits the board even in a narrow pane: v shows the list
   expect(await ui.find({ key: 'group-done' })).toBeUndefined()
   await ui.press({ key: 'view' })
-  expect(await ui.find({ key: 'open-T-WEB-0005-step-5' })).toBeUndefined()
+  expect(await ui.find({ key: 'open-TASK-0005-step-5' })).toBeUndefined()
   await ui.press({ key: 'group-done' })
-  expect(await ui.find({ key: 'open-T-WEB-0005-step-5' })).toBeDefined()
-  expect(await ui.find({ key: 'open-T-WEB-0003-step-3' })).toBeDefined()
-  expect(await ui.find({ key: 'open-T-WEB-0002-step-2' })).toBeUndefined()
+  expect(await ui.find({ key: 'open-TASK-0005-step-5' })).toBeDefined()
+  expect(await ui.find({ key: 'open-TASK-0003-step-3' })).toBeDefined()
+  expect(await ui.find({ key: 'open-TASK-0002-step-2' })).toBeUndefined()
   await ui.press({ key: 'more-done' })
-  expect(await ui.find({ key: 'open-T-WEB-0001-step-1' })).toBeDefined()
+  expect(await ui.find({ key: 'open-TASK-0001-step-1' })).toBeDefined()
   await ui.unmount()
 })
 
 test('a wide pane shows the columns side by side, and v swaps to the list', async ($, on) => {
-  const tasks = [...TASKS, { task: '[[T-WEB-0003-cart]]', progress: 'done', priority: 'low', phase: '',
+  const tasks = [...TASKS, { task: '[[TASK-0003-cart]]', progress: 'done', priority: 'low', phase: '',
     assignee: '', title: 'Cart' }]
   engine(on, { tasks })
   await start($)
 
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: { ...PANE.props, bodyColumns: 140 } })
   // the board: every column at once, the done ones too, and no group to open; an empty one is its heading
-  expect(await ui.find({ key: 'open-T-WEB-0003-cart' })).toBeDefined()
+  expect(await ui.find({ key: 'open-TASK-0003-cart' })).toBeDefined()
   expect(await ui.find({ key: 'group-done' })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: / Blocked 0 / })).toBeDefined()
   await ui.press({ key: 'view' })
   expect(await ui.find({ key: 'group-done' })).toBeDefined()
-  expect(await ui.find({ key: 'open-T-WEB-0003-cart' })).toBeUndefined()
+  expect(await ui.find({ key: 'open-TASK-0003-cart' })).toBeUndefined()
   await ui.press({ key: 'view' })
-  expect(await ui.find({ key: 'open-T-WEB-0003-cart' })).toBeDefined()
+  expect(await ui.find({ key: 'open-TASK-0003-cart' })).toBeDefined()
   await ui.unmount()
 })
 
@@ -382,7 +402,7 @@ test('the state an earlier pane left in the session still draws', async ($, on) 
   await start($)
 
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-  expect(await ui.find({ key: 'open-T-WEB-0001-checkout-page' })).toBeDefined()
+  expect(await ui.find({ key: 'open-TASK-0001-checkout-page' })).toBeDefined()
   expect(await ui.find({ key: 'view' })).toBeDefined()
   await ui.unmount()
 })
@@ -428,7 +448,7 @@ test('where only "python" answers, the scripts run with it', async ($, on) => {
   await start($)
 
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-  expect(await ui.find({ key: 'open-T-WEB-0001-checkout-page' })).toBeDefined()
+  expect(await ui.find({ key: 'open-TASK-0001-checkout-page' })).toBeDefined()
   expect(ran[0]?.[0]).toBe('python')
   await ui.unmount()
 })
@@ -438,7 +458,7 @@ test('from a subfolder of the project the pane still finds the tasks', async ($,
   await start($, '/project/repositories/web')
 
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-  expect(await ui.find({ key: 'open-T-WEB-0001-checkout-page' })).toBeDefined()
+  expect(await ui.find({ key: 'open-TASK-0001-checkout-page' })).toBeDefined()
   expect(ran[0]).toContain('/project')
   await ui.unmount()
 })
@@ -462,17 +482,17 @@ test('a task typed in the pane goes to Claude, never to the wiki', async ($, on)
 })
 
 test('the inject button hands the task to Claude, on open and closed tasks alike', async ($, on) => {
-  const tasks = [...TASKS, { task: '[[T-WEB-0003-cart]]', progress: 'done', priority: 'low', phase: '',
+  const tasks = [...TASKS, { task: '[[TASK-0003-cart]]', progress: 'done', priority: 'low', phase: '',
     assignee: '', title: 'Cart' }]
   const { sent, written } = engine(on, { tasks })
   await start($)
 
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-  await ui.press({ key: 'inject-T-WEB-0001-checkout-page' })
+  await ui.press({ key: 'inject-TASK-0001-checkout-page' })
   await ui.press({ key: 'group-done' })
-  await ui.press({ key: 'inject-T-WEB-0003-cart' })
+  await ui.press({ key: 'inject-TASK-0003-cart' })
   expect(sent.length).toBe(2)
-  expect(sent[0]).toContain('Bring task T-WEB-0001 (T-WEB-0001-checkout-page) into context.')
+  expect(sent[0]).toContain('Bring task TASK-0001 (TASK-0001-checkout-page) into context.')
   expect(sent[1]).toContain('(progress: done)')
   expect(sent[1]).toContain('Do not change the wiki')
   expect(written.length).toBe(0)
@@ -484,13 +504,13 @@ test('pressing a task opens its detail in place of the list, and Back returns', 
   await start($)
 
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-  await ui.press({ key: 'open-T-WEB-0001-checkout-page' })
-  expect(ran.at(-1)).toEqual(['python3', '/plugin/scripts/wiki-query.py', 'task', 'T-WEB-0001-checkout-page',
+  await ui.press({ key: 'open-TASK-0001-checkout-page' })
+  expect(ran.at(-1)).toEqual(['python3', '/plugin/scripts/wiki-query.py', 'task', 'TASK-0001-checkout-page',
     '--format', 'json', '--root', '/project'])
   // the title from the frontmatter, the linked task as a button, the inject button
   expect(await ui.find({ type: 'Text', text: /The customer's checkout page/ })).toBeDefined()
-  expect(await ui.find({ key: 'link-T-WEB-0002-payment-step' })).toBeDefined()
-  expect(await ui.find({ key: 'inject-T-WEB-0001-checkout-page' })).toBeDefined()
+  expect(await ui.find({ key: 'link-TASK-0002-payment-step' })).toBeDefined()
+  expect(await ui.find({ key: 'inject-TASK-0001-checkout-page' })).toBeDefined()
   // its properties, named and drawn as the model says
   expect(await ui.find({ type: 'Text', text: /^Status$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^ In progress $/ })).toBeDefined()
@@ -506,7 +526,7 @@ test('the edit form sends only the changed fields to Claude, and writes nothing'
   await start($)
 
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-  await ui.press({ key: 'open-T-WEB-0001-checkout-page' })
+  await ui.press({ key: 'open-TASK-0001-checkout-page' })
   await ui.press({ key: 'edit' })
   // nothing changed yet: nothing is sent
   await ui.press({ key: 'apply' })
@@ -516,7 +536,7 @@ test('the edit form sends only the changed fields to Claude, and writes nothing'
   expect(await ui.find({ type: 'Text', text: /2 change\(s\): progress, body/ })).toBeDefined()
   await ui.press({ key: 'apply' })
   expect(sent.length).toBe(1)
-  expect(sent[0]).toContain('Update task T-WEB-0001 (T-WEB-0001-checkout-page) with /projectwright:manage-tasks.')
+  expect(sent[0]).toContain('Update task TASK-0001 (TASK-0001-checkout-page) with /projectwright:manage-tasks.')
   expect(sent[0]).toContain('- progress: "in-progress" → "done"')
   expect(sent[0]).not.toContain('priority:')
   expect(sent[0]).toContain('add a criterion on the tests')
@@ -527,12 +547,12 @@ test('the edit form sends only the changed fields to Claude, and writes nothing'
 })
 
 test('a write tells the wiki apart from the code, on Windows paths too', () => {
-  expect(touchesWiki('/project/wiki/tasks/T-WEB-0009-new.md', '/project')).toBe(true)
+  expect(touchesWiki('/project/wiki/tasks/TASK-0009-new.md', '/project')).toBe(true)
   expect(touchesWiki('/project/project.yaml', '/project')).toBe(true)
   expect(touchesWiki('/project/repositories/web/app.ts', '/project')).toBe(false)
   expect(touchesWiki('/projects/other/wiki/x.md', '/project')).toBe(false)
   // Windows: back slashes, a drive letter, and a case that does not matter
-  expect(touchesWiki('C:\\Work\\Shop\\wiki\\tasks\\T-WEB-0009-new.md', 'C:\\Work\\Shop')).toBe(true)
+  expect(touchesWiki('C:\\Work\\Shop\\wiki\\tasks\\TASK-0009-new.md', 'C:\\Work\\Shop')).toBe(true)
   expect(touchesWiki('c:\\work\\shop\\wiki\\x.md', 'C:\\Work\\Shop\\')).toBe(true)
   expect(touchesWiki('C:/Work/Shop/project.yaml', 'C:\\Work\\Shop')).toBe(true)
   expect(touchesWiki('C:\\Work\\Shop\\repositories\\web\\app.ts', 'C:\\Work\\Shop')).toBe(false)
@@ -546,7 +566,7 @@ test('a write of Claude in the wiki refreshes the pane, a write in the code does
 
   // a refresh reads the tasks, the proposals and the reminders
   const before = ran.length
-  await $.tool.call({ tool: 'Write', file_path: '/project/wiki/tasks/T-WEB-0009-new.md', content: 'x' })
+  await $.tool.call({ tool: 'Write', file_path: '/project/wiki/tasks/TASK-0009-new.md', content: 'x' })
   expect(ran.length).toBe(before + 3)
   await $.tool.call({ tool: 'Write', file_path: '/project/repositories/web/app.ts', content: 'x' })
   expect(ran.length).toBe(before + 3)
@@ -586,10 +606,10 @@ test('while the pane is shown it looks at the wiki every 30 seconds, for changes
 
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   await ui.press({ key: 'group-done' })
-  expect(await ui.find({ key: 'open-T-WEB-0001-checkout-page' })).toBeDefined()
+  expect(await ui.find({ key: 'open-TASK-0001-checkout-page' })).toBeDefined()
   expect((await ui.find({ key: 'group-done' }))?.text).toContain('Done 0')
   // someone closes a task in an editor
-  tasks = TASKS.map(t => (t.task === '[[T-WEB-0001-checkout-page]]' ? { ...t, progress: 'done' } : t))
+  tasks = TASKS.map(t => (t.task === '[[TASK-0001-checkout-page]]' ? { ...t, progress: 'done' } : t))
   await clock.advance(30_000)
   expect((await ui.find({ key: 'group-done' }))?.text).toContain('Done 1')
   expect((await ui.find({ key: 'group-in-progress' }))?.text).toContain('In progress 0')

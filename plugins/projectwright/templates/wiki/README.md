@@ -127,21 +127,23 @@ Additional fields by type (the required ones and the allowed values are in `sche
 | `source-card` | `hash`; `ingested_on`; `source_kind: event \| reference` (minutes are events; reference documents describe the current truth and get updated) |
 | `component` | `code`; `component_status: planned \| active \| retired`; `repository` (name in `repositories/`) |
 
+**A blocked task says so, and says why.** A task that a task still open (not `done` nor `cancelled`) blocks has `progress: blocked`, never `todo` or `in-progress` — the lint checks it; and a `blocked` task always has its reason: a task in `blocked_by`, or a line in its body for anything else. When a task closes, the tasks it blocked are freed on the user's yes (principle 13): taken out of their `blocked_by` and, with nothing else blocking them, back to `todo`.
+
 ---
 
 ## IDs
 
-Uniform format: **`<TYPE>-<CODE>-NNNN`**, a four-digit number **per code**, never reused.
+Decisions and questions: **`<TYPE>-<CODE>-NNNN`**, a four-digit number **per code**. Tasks: **`TASK-NNNN`**, one number for the **whole project** — the board's numbering, as in a tracker; the component of a task is its folder and its `area`. Never reused.
 
 | Element | Format | Example |
 |---|---|---|
 | Decision | `ADR-<CODE>-NNNN` | `ADR-ARCH-0012`, `ADR-FE-0003` |
 | Question | `Q-<CODE>-NNNN` | `Q-ARCH-0004`, `Q-FE-0001` |
-| Task (tasks.mode = wiki) | `T-<CODE>-NNNN` | `T-FE-0012` |
+| Task (tasks.mode = wiki) | `TASK-NNNN` | `TASK-0012` |
 
-- **`<CODE>`** is the code of a project area (`wiki.areas` in `project.yaml`) for cross-cutting elements, or the code of a component (`components[].code`) for elements internal to it. The `area` field holds the same code.
+- **`<CODE>`** is the code of a project area (`wiki.areas` in `project.yaml`) for cross-cutting elements, or the code of a component (`components[].code`) for elements internal to it. The `area` field holds the same code — for tasks too, whose ID has none.
 - File name = ID + slug: `Q-FE-0001-http-timeout-to-backend.md`. The `id` field matches the prefix of the file name.
-- **Safe ID**: whoever assigns an ID takes the highest number for that code among the files of the wiki, plus one. When the project folder is versioned with git and shared, first run `git fetch` and consider also the files on `origin/<git.main_branch>`.
+- **Safe ID**: whoever assigns an ID takes the highest number for that code among the files of the wiki, plus one — for a task, the highest `TASK` number of the whole wiki, plus one. When the project folder is versioned with git and shared, first run `git fetch` and consider also the files on `origin/<git.main_branch>`.
 - **Collision between branches** (only when the project folder is versioned and shared): if two people assign the same ID in parallel, the lint reports the duplicate after the merge; the more recent element is renumbered. It is the only case in which an ID changes.
 
 ---

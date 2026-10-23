@@ -199,7 +199,7 @@ def cmd_task(root, project, args):
     """One task in full: every frontmatter field, its body and the notes it links."""
     wanted = (args.name or "").strip().removeprefix("[[").removesuffix("]]")
     if not wanted:
-        raise NotFound("task: name the task, by file name or ID (T-WEB-0004)")
+        raise NotFound("task: name the task, by file name or ID (TASK-0004)")
     found = [r for r in records(root, project)
              if r.get("type") == "task" and wanted in (r["_name"], str(r.get("id")))]
     if not found:

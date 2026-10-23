@@ -60,12 +60,12 @@ test('the list output has the fields the board reads', () => {
     for (const field of ['task', 'progress', 'priority', 'phase', 'assignee', 'title']) {
       expect(typeof t[field]).toBe('string')
     }
-    expect(String(t.task)).toMatch(/^\[\[T-[A-Z0-9]+-\d+-.+\]\]$/)
+    expect(String(t.task)).toMatch(/^\[\[TASK-\d{4}-.+\]\]$/)
     // the fields of a card
     for (const field of ['id', 'updated', 'closed_on', 'blocked_by']) expect(typeof t[field]).toBe('string')
   }
   const blocked = TASKS.find(t => t.progress === 'blocked')
-  expect(blocked?.blocked_by).toBe('T-WEB-0002-payment-step')
+  expect(blocked?.blocked_by).toBe('TASK-0002-payment-step')
 })
 
 test('the model has a column for every progress and the fields the board draws', () => {
@@ -189,7 +189,7 @@ test('an edit starts from the values in the wiki', async ($, on) => {
   const { sent } = engine(on)
   await $.session.start({ cwd: '/project', surface: 'terminal', isInteractive: true })
 
-  const name = 'T-WEB-0003-order-history'
+  const name = 'TASK-0003-order-history'
   const d = DETAILS[name] ?? {}
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   await showColumnOf(ui, name)

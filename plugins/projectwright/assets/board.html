@@ -22,6 +22,7 @@
   --red-bg: #ffe2dd; --red-fg: #5d1715; --red-col: #fdf6f5;
   --green-bg: #dbeddb; --green-fg: #1c3829; --green-col: #f6faf6;
   --yellow-bg: #fdecc8; --yellow-fg: #402c1b; --yellow-col: #fcfaf3;
+  --orange-bg: #fadec9; --orange-fg: #49290e; --orange-col: #fdf7f2;
 }
 @media (prefers-color-scheme: dark) {
   :root { --bg: #191919; --text: #d4d4d4; --muted: #9b9b9b; --faint: #7f7f7f; --line: #2f2f2f; --hover: #232323;
@@ -31,6 +32,7 @@
           --red-bg: #6e3630; --red-fg: #fbe4e1; --red-col: #241b1a;
           --green-bg: #2b593f; --green-fg: #e0f2e6; --green-col: #1a221d;
           --yellow-bg: #89632a; --yellow-fg: #fbf0dc; --yellow-col: #23201a;
+          --orange-bg: #854c1d; --orange-fg: #fde8d6; --orange-col: #251d17;
           color-scheme: dark; }
 }
 * { box-sizing: border-box; }
@@ -55,6 +57,7 @@ button:focus-visible, .card:focus-visible, tr.row:focus-visible, #search:focus-v
 .c-gray { background: var(--gray-bg); color: var(--gray-fg); } .c-blue { background: var(--blue-bg); color: var(--blue-fg); }
 .c-red { background: var(--red-bg); color: var(--red-fg); } .c-green { background: var(--green-bg); color: var(--green-fg); }
 .c-yellow { background: var(--yellow-bg); color: var(--yellow-fg); }
+.c-orange { background: var(--orange-bg); color: var(--orange-fg); }
 .kanban { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(240px, 1fr); gap: 12px; overflow-x: auto; padding: 4px 2px 8px; }
 .col { border-radius: 8px; padding: 8px; display: grid; gap: 8px; align-content: start; }
 .col-head { display: flex; align-items: center; gap: 8px; padding: 2px 2px 4px; }
@@ -156,7 +159,8 @@ function esc(s) {
 }
 function list(v) { return Array.isArray(v) ? v : (v == null || v === "" ? [] : [v]); }
 function linkName(v) { var m = /\[\[([^\]|#]+)/.exec(String(v)); return m ? m[1].trim() : String(v); }
-function idOf(name) { var m = /^(T-[A-Z0-9]+-\d+)/.exec(name); return m ? m[1] : name; }
+// TASK-0012, and T-WEB-0012 in a project not yet renumbered (framework.py renumber-tasks)
+function idOf(name) { var m = /^(TASK-\d+|T-[A-Z0-9]+-\d+)/.exec(name); return m ? m[1] : name; }
 // A link to another task opens it; any other note of the wiki is a name, the board shows only tasks.
 function wl(name, label) {
   name = linkName(name);
@@ -167,6 +171,9 @@ function chip(text, color, dot) { return '<span class="chip c-' + esc(color || "
 function statusChip(progress) { var c = COLUMN[progress]; return c ? chip(c.label, c.color, true) : esc(progress); }
 function priorityChip(value) { var p = PRIORITY[value]; return p ? chip(p.label, p.color) : esc(value); }
 function blockers(t) { return list(t.blocked_by).map(linkName); }
+// A blocker that is closed (a column of the history: done, cancelled) blocks no more.
+function isClosed(name) { return BY_NAME[name] && MODEL.history.columns.indexOf(BY_NAME[name].progress) >= 0; }
+function openBlockers(t) { return blockers(t).filter(function (n) { return !isClosed(n); }); }
 function matches(t) {
   if (!state.q) return true;
   return [t.id, t.title, t.name, t.body, t.assignee, t.phase].join(" ").toLowerCase().indexOf(state.q.toLowerCase()) >= 0;
@@ -179,7 +186,7 @@ function value(t, field) {
     case "priority": return t.priority ? priorityChip(t.priority) : "";
     case "assignee": return t.assignee ? '<span class="who">@' + esc(t.assignee) + "</span>" : "";
     case "id": return '<span class="id">' + esc(t.id || idOf(t.name)) + "</span>";
-    case "blocked_by": return blockers(t).length ? chip("Blocked by " + blockers(t).map(idOf).join(", "), "red") : "";
+    case "blocked_by": return openBlockers(t).length ? chip("Blocked by " + openBlockers(t).map(idOf).join(", "), (COLUMN.blocked || {}).color) : "";
     default: return esc(t[field]);
   }
 }
@@ -263,7 +270,9 @@ function openTask(name) {
   var t = BY_NAME[name];
   if (!t) return;
   var rows = MODEL.detail.map(function (f) {
-    var v = f === "blocked_by" ? blockers(t).map(function (n) { return wl(n); }).join(", ") : value(t, f);
+    var v = f === "blocked_by" ? blockers(t).map(function (n) {
+      return wl(n) + (isClosed(n) ? ' <span class="plain">(' + esc((COLUMN[BY_NAME[n].progress] || {}).label || BY_NAME[n].progress) + ", no longer blocks)</span>" : "");
+    }).join(", ") : value(t, f);
     return v ? "<dt>" + esc(MODEL.fields[f] || f) + "</dt><dd>" + v + "</dd>" : "";
   }).join("");
   var linked = list(t.links).filter(function (n) { return BY_NAME[n]; });

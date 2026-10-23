@@ -48,6 +48,11 @@ Usage (from the project root, or with --root):
                                          asking: allow rules for those only, in .claude/settings.local.json
                                          (personal, never versioned); the start-of-session check keeps
                                          them up to date when the plugin moves (a new version)
+    python3 framework.py renumber-tasks [--apply]
+                                         tasks numbered once for the whole project: the tasks still
+                                         named T-<CODE>-NNNN become TASK-NNNN (in order of creation),
+                                         with their file names, every mention in wiki/ and in the
+                                         proposals and reminders; without --apply it prints the plan
     python3 framework.py check [--hook]  start-of-session check: the plugin that runs is the one the
                                          project expects (version, copy in the project); records the
                                          plugin path for the git hook (.claude/.projectwright-plugin)
@@ -59,6 +64,7 @@ import datetime
 import hashlib
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -714,18 +720,82 @@ def cmd_check(root, hook):
     return 0
 
 
+OLD_TASK_ID = re.compile(r"\bT-([A-Z]{2,8})-([0-9]{4})\b")
+NEW_TASK_ID = re.compile(r"^TASK-([0-9]{4})$")
+OWN_FILES = [Path(".claude") / ".projectwright-proposals.json", Path(".claude") / ".projectwright-reminders.json"]
+
+
+def task_renumbering(root):
+    """{old id: new id} for the tasks still numbered per code, in order of creation, after the existing TASK ids."""
+    old, highest = [], 0
+    for p in pwlib.wiki_files(root):
+        fm, _err, _text = pwlib.read_frontmatter(p)
+        if not fm or fm.get("type") != "task":
+            continue
+        rid = str(fm.get("id") or "")
+        m = NEW_TASK_ID.match(rid)
+        if m:
+            highest = max(highest, int(m.group(1)))
+            continue
+        m = OLD_TASK_ID.fullmatch(rid)
+        if m:
+            old.append((str(fm.get("created") or ""), m.group(1), int(m.group(2)), rid))
+    old.sort()
+    return {rid: "TASK-%04d" % (highest + i) for i, (_c, _code, _n, rid) in enumerate(old, start=1)}
+
+
+def cmd_renumber_tasks(root, apply):
+    mapping = task_renumbering(root)
+    if not mapping:
+        print("no task to renumber: every task is already TASK-NNNN")
+        return 0
+    for old, new in mapping.items():
+        print("%s -> %s" % (old, new))
+    if not apply:
+        print("---\n%d task(s) to renumber: run again with --apply" % len(mapping))
+        return 0
+    swap = lambda text: OLD_TASK_ID.sub(lambda m: mapping.get(m.group(0), m.group(0)), text)
+    changed, untouched = 0, []
+    for p in pwlib.wiki_files(root):
+        text = p.read_text(encoding="utf-8")
+        new_text = swap(text)
+        if new_text == text:
+            continue
+        if pwlib.rel(root, p).startswith("wiki-sources/"):
+            untouched.append(pwlib.rel(root, p))  # the cards are immutable: reported, not changed
+            continue
+        p.write_text(new_text, encoding="utf-8", newline="\n")
+        changed += 1
+    for own in OWN_FILES:
+        p = Path(root) / own
+        if p.is_file():
+            p.write_text(swap(p.read_text(encoding="utf-8")), encoding="utf-8", newline="\n")
+    renamed = 0
+    for p in pwlib.wiki_files(root):
+        m = OLD_TASK_ID.match(p.stem)
+        if m and m.group(0) in mapping and pwlib.rel(root, p).startswith("wiki/"):
+            p.rename(p.with_name(mapping[m.group(0)] + p.name[len(m.group(0)):]))
+            renamed += 1
+    print("---\n%d task file(s) renamed, %d file(s) of the wiki rewritten; proposals and reminders updated"
+          % (renamed, changed))
+    for rp in untouched:
+        print("not changed (ingestion card, immutable): %s cites an old task id" % rp)
+    print("run wiki-lint.py to confirm, and board.py to redraw the board")
+    return 0
+
+
 def main():
     pwlib.ensure_python()
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("command", choices=["lock", "changes", "diff", "vendor", "check", "upgrade", "resolved",
-                                        "permissions"])
+                                        "permissions", "renumber-tasks"])
     ap.add_argument("files", nargs="*")
     ap.add_argument("--format", choices=["table", "json"], default="table")
     ap.add_argument("--add", action="store_true", help="with lock: add only the given files")
     ap.add_argument("--hook", action="store_true", help="with check: run as the SessionStart hook")
     ap.add_argument("--from", dest="source", help="with upgrade and lock: folder of the new version of the plugin")
     ap.add_argument("--base-plugin", help="with upgrade: folder of the current version, when the original copy is missing")
-    ap.add_argument("--apply", action="store_true", help="with upgrade: apply the plan")
+    ap.add_argument("--apply", action="store_true", help="with upgrade and renumber-tasks: apply the plan")
     ap.add_argument("--remove", action="store_true", help="with permissions: remove the rules")
     ap.add_argument("--root")
     args = ap.parse_args()
@@ -754,6 +824,8 @@ def main():
         return cmd_resolved(root, args.files)
     if args.command == "permissions":
         return cmd_permissions(root, args.remove)
+    if args.command == "renumber-tasks":
+        return cmd_renumber_tasks(root, args.apply)
     return cmd_diff(root, args.files)
 
 

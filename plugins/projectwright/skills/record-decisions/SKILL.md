@@ -67,7 +67,7 @@ When the framework was upgraded in this session and an upgrade includes a change
 
 When `tasks.mode` is `tracker` and the session worked on an issue (its key is known from the session):
 
-- prepare for the issue a **content comment** — decisions taken and constraints, in your own words, following the drafting rules of the code: no wiki IDs (`ADR-*`, `Q-*`, `T-*`), no names of people or companies, by role;
+- prepare for the issue a **content comment** — decisions taken and constraints, in your own words, following the drafting rules of the code: no wiki IDs (`ADR-*`, `Q-*`, `TASK-*`), no names of people or companies, by role;
 - propose the **status change** of the issue, after reading its current status from the tracker;
 - for every 🔴 question opened, propose a linked issue or a note on the affected issue, rephrased for whoever can read the tracker;
 - record the issue key in the `tracker` field of the ADRs and notes concerned (one-way link: wiki → tracker).

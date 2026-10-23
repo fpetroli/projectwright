@@ -32,9 +32,12 @@ const view = atom({ plugin: 'projectwright-board', key: 'view' } as const, NO_VI
 // What a board shows — columns, labels, colors, the fields of a card — is
 // defined once in projectwright (assets/board-model.json), for board.html and
 // this pane alike. The pane turns its color names into theme keys, so they
-// follow the person's light or dark theme.
+// follow the person's light or dark theme; blue and orange have no key of their
+// own (the nearest ones read violet and yellow), so they are mid tones that read on both.
 const MODEL = 'assets/board-model.json'
-const COLOR: Record<string, string> = { blue: 'suggestion', red: 'error', gray: 'inactive', green: 'success', yellow: 'warning' }
+const COLOR: Record<string, string> = {
+  blue: '#3b82f6', orange: '#ea7a2c', red: 'error', gray: 'inactive', green: 'success', yellow: 'warning',
+}
 const colorOf = (name?: string) => COLOR[name ?? ''] ?? 'text'
 const columnOf = (model: Model, progress: string) =>
   model.columns.find(c => c.progress === progress) ?? { progress, label: progress, color: '' }
@@ -42,7 +45,12 @@ const priorityOf = (model: Model, value: string) => model.priorities.find(p => p
 // "a, b" as the list JSON prints a list field; the detail keeps it a list of links.
 const namesIn = (v: unknown) => (Array.isArray(v) ? v.map(String) : String(v ?? '').split(','))
   .map(s => s.trim().replace(/^\[\[|\]\]$/g, '').replace(/\|.*$/, '')).filter(Boolean)
-const idOf = (n: string) => /^(T-[A-Z0-9]+-\d+)/.exec(n)?.[1] ?? n
+// A task's id: TASK-0012, or T-WEB-0012 in a project not yet renumbered (framework.py renumber-tasks).
+const TASK_ID = /^(TASK-\d+|T-[A-Z0-9]+-\d+)/
+const idOf = (n: string) => TASK_ID.exec(n)?.[1] ?? n
+// A blocker that is closed (a column of the history: done, cancelled) blocks no more.
+const closedIn = (model: Model, tasks: Task[]) => (n: string) =>
+  model.history.columns.includes(tasks.find(t => name(t) === n)?.progress ?? '')
 
 const now = () => new Date().toTimeString().slice(0, 5)
 // Today in the person's time zone, as the reminders' dates are written: 2026-10-23.
@@ -230,10 +238,10 @@ const applyEdit = async ($: EngineInterface, form: Edit) => {
   $.ui.toast(`board: changes to ${id} sent to Claude`)
 }
 
-// "T-WEB-0004-checkout-page" → id "T-WEB-0004", and its title: the one in the
+// "TASK-0004-checkout-page" → id "TASK-0004", and its title: the one in the
 // wiki, or, for a link to a task not in the list, words from the file name.
 const split = (t: Task) => {
-  const m = /^(T-[A-Z0-9]+-\d+)-?(.*)$/.exec(name(t))
+  const m = new RegExp(`${TASK_ID.source}-?(.*)$`).exec(name(t))
   const words = (m?.[2] ?? '').replace(/-/g, ' ')
   const fallback = words.charAt(0).toUpperCase() + words.slice(1)
   return { id: m?.[1] ?? name(t), title: t.title || fallback }
@@ -470,6 +478,7 @@ export const register: Register = on => {
 
     if (error) return <Text color="error">{error}</Text>
     if (!model) return <Text dimColor>Reading the wiki…</Text>
+    const isClosed = closedIn(model, tasks)
 
     // A value of the model as a chip: its label on its color, in either theme.
     const chip = (label: string, color: string, key: string) => (
@@ -557,7 +566,17 @@ export const register: Register = on => {
         const blockers = namesIn(d?.blocked_by ?? t.blocked_by)
         const value = f === 'progress' ? (progress && chip(columnOf(model, progress).label, columnOf(model, progress).color, 'v'))
           : f === 'priority' ? (priority && chip(priority.label, priority.color, 'v'))
-          : f === 'blocked_by' ? (blockers.length > 0 && <Text key="v" color="error">{blockers.map(idOf).join(', ')}</Text>)
+          : f === 'blocked_by' ? (blockers.length > 0 && (
+            <Text key="v" wrap="wrap">
+              {blockers.map((b, i) => (
+                <Text key={`blocker-${b}`}>
+                  {i > 0 && ', '}
+                  {isClosed(b)
+                    ? <Text dimColor>{idOf(b)} ({columnOf(model, tasks.find(x => name(x) === b)?.progress ?? '').label}, no longer blocks)</Text>
+                    : <Text color={colorOf(columnOf(model, 'blocked').color)}>{idOf(b)}</Text>}
+                </Text>
+              ))}
+            </Text>))
           : (field(f) && <Text key="v" wrap="wrap">{field(f)}</Text>)
         if (!value) return undefined
         return (
@@ -570,7 +589,7 @@ export const register: Register = on => {
       const Markdown = 'Markdown' in elements ? elements.Markdown : undefined
       // The note's own heading repeats the title drawn above; wikilinks read as names.
       const body = (d?.body ?? '').replace(/^# .*\n+/, '').replace(/\[\[([^\]|]+)(\|[^\]]*)?\]\]/g, '$1')
-      const tasksLinked = (d?.links ?? []).filter(l => /^T-[A-Z0-9]+-\d+/.test(l))
+      const tasksLinked = (d?.links ?? []).filter(l => TASK_ID.test(l))
       const otherLinks = (d?.links ?? []).filter(l => !tasksLinked.includes(l))
 
       // The edit form, in place of the detail; the mobile app has no field to type in.
@@ -687,11 +706,11 @@ export const register: Register = on => {
     // One field of a card, as the model lists them and board.html draws them.
     const cardField = (t: Task, f: string) => {
       const priority = priorityOf(model, t.priority)
-      const blockers = namesIn(t.blocked_by)
+      const blockers = namesIn(t.blocked_by).filter(n => !isClosed(n))
       if (f === 'id') return <Text key={f} dimColor>{split(t).id}</Text>
       if (f === 'priority') return priority && chip(priority.label, priority.color, f)
       if (f === 'assignee') return t.assignee && <Text key={f} color="subtle">@{t.assignee}</Text>
-      if (f === 'blocked_by') return blockers.length > 0 && chip(`Blocked by ${blockers.map(idOf).join(', ')}`, 'red', f)
+      if (f === 'blocked_by') return blockers.length > 0 && chip(`Blocked by ${blockers.map(idOf).join(', ')}`, columnOf(model, 'blocked').color, f)
       const value = t[f as keyof Task]
       return value && <Text key={f} color="subtle">{String(value)}</Text>
     }
@@ -924,7 +943,7 @@ export const register: Register = on => {
             <Box flexDirection="row" justifyContent="space-between">
               <Text>
                 <Text bold>{open}</Text> open
-                {blocked > 0 && <Text color="error"> · {blocked} blocked</Text>}
+                {blocked > 0 && <Text color={colorOf(columnOf(model, 'blocked').color)}> · {blocked} blocked</Text>}
               </Text>
               <Box flexDirection="row" gap={2}>
                 <Text color="success">{done}/{tasks.length} done</Text>

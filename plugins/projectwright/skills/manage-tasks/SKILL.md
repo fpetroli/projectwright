@@ -7,22 +7,22 @@ description: Manages the tasks of the project when the wiki is the tracker (task
 
 User input: $ARGUMENTS
 
-When `tasks.mode` is `wiki`, the wiki is the project's tracker: **one file per task**, `T-<CODE>-NNNN-<slug>.md`, in `wiki/tasks/` (cross-cutting tasks) or `wiki/components/<repo>/tasks/` (tasks of a component). The rules — fields, values, IDs, language of the content — are in the constitution (`wiki/README.md`) and in the method schema; this skill applies them. Tasks are written in `project.language`, with the headings of the existing tasks. The board `board.html` shows the tasks in columns and is regenerated automatically after every write.
+When `tasks.mode` is `wiki`, the wiki is the project's tracker: **one file per task**, `TASK-NNNN-<slug>.md` (one number for the whole project), in `wiki/tasks/` (cross-cutting tasks) or `wiki/components/<repo>/tasks/` (tasks of a component). The rules — fields, values, IDs, language of the content — are in the constitution (`wiki/README.md`) and in the method schema; this skill applies them. Tasks are written in `project.language`, with the headings of the existing tasks. The board `board.html` shows the tasks in columns and is regenerated automatically after every write.
 
 If `tasks.mode` is `tracker`, the tasks live in the external tracker: say so, and stop.
 
 ## What the user can ask, and what you do
 
-Requests come in plain words ("create a task to…", "move the cart to in progress", "assign the payment step to the backend developer", "close T-WEB-0004", "what is blocked?", "plan sprint 3"), in chat or sent from a board. Interpret them, act, and confirm in one line per task changed.
+Requests come in plain words ("create a task to…", "move the cart to in progress", "assign the payment step to the backend developer", "close TASK-0004", "what is blocked?", "plan sprint 3"), in chat or sent from a board. Interpret them, act, and confirm in one line per task changed.
 
 **Tasks are decided with the user** (constitution, principle 13). A request is the user's yes for what it asks — and only for that. What the request does not cover is **proposed**, never done: another task to create, a task that looks finished, a block discovered on the way, a priority that seems wrong. Write it as a proposal — `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/proposals.py" add --json '<proposal>'`, after checking with `proposals.py list --status all --format json` that it is not already open or rejected — list it after the confirmation, numbered 1, 2, 3 — never with the proposal ids, which are for the tools — and write it in the wiki only after the user's yes. When the request itself leaves a choice open that changes the task (which component, which phase, what blocks it), ask; infer only the details (goal, acceptance criteria, placement), and say what you inferred.
 
 | Request | Action |
 |---|---|
-| **Create** | New file from the template `${CLAUDE_PLUGIN_ROOT}/templates/records/task.md`: title, **goal** and **acceptance criteria** in the body, `progress: todo` unless said otherwise, `priority` (default `medium`), `phase`, `assignee` **by role** (never a person's name), links in `decisions`, `questions`, `blocked_by`. Place it in the component it belongs to (placement rule of the constitution) or in `wiki/tasks/`. **Safe ID**: the highest number for that code among the task files, plus one (constitution, IDs). |
-| **Move** | Change `progress` (`todo`, `in-progress`, `blocked`, `done`, `cancelled`) and `updated`. Moving to `blocked`: ask what blocks it if not said, and record it in `blocked_by` (a task) or in the body (anything else). Moving to `done`: **consolidate** it (below), set `closed_on`; if commits closed it, add their hashes to `commits` (ask for them only if the user wants them recorded). |
+| **Create** | New file from the template `${CLAUDE_PLUGIN_ROOT}/templates/records/task.md`: title, **goal** and **acceptance criteria** in the body, `progress: todo` unless said otherwise — `blocked` when an open task blocks it (constitution: a blocked task says so, and says why) — `priority` (default `medium`), `phase`, `assignee` **by role** (never a person's name), links in `decisions`, `questions`, `blocked_by`. Place it in the component it belongs to (placement rule of the constitution) or in `wiki/tasks/`. **Safe ID**: the highest `TASK` number among all the task files of the wiki, plus one (constitution, IDs); `area` is the code of the component or of the area. |
+| **Move** | Change `progress` (`todo`, `in-progress`, `blocked`, `done`, `cancelled`) and `updated`. Moving to `blocked`: ask what blocks it if not said, and record it in `blocked_by` (a task) or in the body (anything else). Moving to `done` or `cancelled`: **consolidate** it (below), set `closed_on`; if commits closed it, add their hashes to `commits` (ask for them only if the user wants them recorded); then **free the tasks it blocked** — propose, for each task that names it in `blocked_by`, to take it out and, when nothing else blocks it, to move it back from `blocked` to `todo`. Moving out of `blocked` while an open task still blocks it: say so, and propose to take the block out of `blocked_by` too. |
 | **Assign / prioritise / plan** | Change `assignee`, `priority`, `phase` (the phase or sprint, matching the roadmap). |
-| **Link** | Add the wikilinks in `decisions`, `questions`, `blocked_by`. |
+| **Link** | Add the wikilinks in `decisions`, `questions`, `blocked_by`. A task added to `blocked_by` that is still open blocks the task: it moves to `blocked` with it, as part of the same request. |
 | **List** | `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/wiki-query.py" tasks [--progress …] [--phase …] [--component …]`, and point to `board.html` for the visual board. |
 
 **Proposals** (`proposals.py`, outside the wiki; the board beside the chat shows them):
@@ -45,7 +45,7 @@ Rules:
 - **The log of an open task** (constitution, principle 14): add one dated line to its **Log** for what the work found, tried, ruled out, and where it stands — without asking, it changes nothing on the board. A decision or a question found on the way goes at once to its ADR or question file (through `/projectwright:record-decisions`), and the log links it.
 - **Consolidate when a task closes**: propose, together with the closing, what of its log has lasting value and which note it goes to — the component's notes, or the project level by the placement rule — and what is only history. After the yes: write it into those notes (linking the task), replace the log with an **Outcome** (what was done, in a few lines, with links to those notes), and close the task. A task cancelled keeps in its outcome why, and what it found that still holds.
 - When a 🔴 question blocks a task, say so and suggest `blocked`.
-- Delivery repositories never cite task IDs (constitution): commits do not mention `T-*`; the task records the commit hashes instead.
+- Delivery repositories never cite task IDs (constitution): commits do not mention `TASK-*`; the task records the commit hashes instead.
 
 ## Closing
 

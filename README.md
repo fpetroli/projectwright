@@ -158,7 +158,7 @@ A few principles shape this layout:
 - **One fact, one place.** Every piece of knowledge has one home; the other notes link it with `[[wikilinks]]`, by file name. File names are unique and never renamed, so links never break.
 - **Epistemic statuses.** Every note says how far it can be trusted: `decided`, `assumed`, `hypothesis`, `conflicting`, `undecided`, `informational`, `superseded`. A wiki where everything is "decided" no longer tells the verified from the supposed.
 - **Hierarchy of truth.** Human documentation → wiki → code → chat. No source wins automatically: when two sources disagree, you decide. What is said in chat becomes true only when it is recorded in the wiki.
-- **One file per record**, with a YAML frontmatter that works as a small database: decisions `ADR-<CODE>-NNNN`, questions `Q-<CODE>-NNNN`, tasks `T-<CODE>-NNNN`. The code is an area of the project (`PRJ`, `MET`, `ARCH`…) or a component (`WS`…). IDs are never reused.
+- **One file per record**, with a YAML frontmatter that works as a small database: decisions `ADR-<CODE>-NNNN`, questions `Q-<CODE>-NNNN`, tasks `TASK-NNNN` (one number for the whole project). The code of decisions and questions is an area of the project (`PRJ`, `MET`, `ARCH`…) or a component (`WS`…); a task tells its component by its folder. IDs are never reused.
 - **Nothing generated is kept.** There are no hand-kept indexes that go out of date: lists are computed from the files when needed.
 - **The wiki is plain Markdown**, in the language of your project; field names stay in English. Obsidian works on it but is not required.
 
@@ -244,7 +244,7 @@ All skills are invoked as `/projectwright:<name>`. You can also just ask in plai
 | `board.py` | Writes `board.html` (`--open` opens it) |
 | `ingestion-diff.py` | Compares the documentation with the ingestion log: what is new, changed, removed |
 | `scaffold.py` | Creates the structure of a project and of a component; `--git` versions the project folder |
-| `framework.py` | The framework files: fingerprint, your changes, their exact diff; `vendor` copies the installed plugin into the project; `check` verifies the plugin setup; `upgrade`; `permissions` lets Claude run the plugin's scripts without asking |
+| `framework.py` | The framework files: fingerprint, your changes, their exact diff; `vendor` copies the installed plugin into the project; `check` verifies the plugin setup; `upgrade`; `permissions` lets Claude run the plugin's scripts without asking; `renumber-tasks` moves the tasks of an older project to `TASK-NNNN` |
 | `profile.py` | Your working profile: `show`, `add`, `remove` |
 | `proposals.py` | The changes to the tasks Claude proposes and you decide: `add`, `list`, `set` (outside the wiki, never versioned) |
 | `reminders.py` | Your reminders, things to keep in mind that are not tasks: `add` (with an optional date), `list`, `done`, `undo`, `remove` (outside the wiki, never versioned) |
