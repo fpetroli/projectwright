@@ -31,3 +31,9 @@ board.html
 
 # Path of the plugin running on this machine, written at every session start (read by the git hook)
 .claude/.projectwright-plugin
+
+# Changes to the tasks proposed by Claude and not yet decided (scripts/proposals.py): personal
+.claude/.projectwright-proposals.json
+
+# The user's reminders (scripts/reminders.py): personal
+.claude/.projectwright-reminders.json

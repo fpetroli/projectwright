@@ -20,7 +20,7 @@ Requirements: Claude Code, git, Python ≥ 3.11 (nothing to install: PyYAML is i
 |---|---|
 | `skills/` | The skills, invoked as `/projectwright:<skill>`: `setup-project`, `add-repository`, `ingest-sources`, `integrate-wiki`, `record-decisions`, `draft-minutes`, `propose-docs`, `propose-improvement`, `manage-tasks`, `wiki-check`, `audit-code`, `upgrade`, `adopt-framework`, `change-setting`, `framework-feedback` |
 | `hooks/hooks.json` | Lint after every write in the wiki; at the start of every session a check of the plugin setup, the user's working profile and the dashboard; `board.html` kept up to date |
-| `scripts/` | `wiki-lint.py`, `wiki-query.py`, `ingestion-diff.py`, `scaffold.py`, `framework.py`, `board.py`, `profile.py`, the common library `pwlib.py`, PyYAML in `_vendor/` |
+| `scripts/` | `wiki-lint.py`, `wiki-query.py`, `ingestion-diff.py`, `scaffold.py`, `framework.py`, `board.py`, `profile.py`, `proposals.py`, `reminders.py`, the common library `pwlib.py`, PyYAML in `_vendor/` |
 | `CHANGELOG.md` | Changes by version, with how to apply them to an existing project |
 | `assets/board.html` | The layout of the board, the read-only view of the tasks generated into `board.html` |
 | `assets/board-model.json` | What a board shows — columns, colors, priorities, the fields of a card, of the table and of the detail — read by `board.py` and by the pane of `projectwright-board` |

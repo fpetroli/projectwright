@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """board — writes board.html, a read-only view of the tasks of the wiki.
 
-Reads the tasks of the wiki (frontmatter and body) and project.yaml, and writes
-them into the layout assets/board.html of the plugin, with the definition of
-what a board shows (assets/board-model.json, shared with projectwright-board).
+Reads the tasks of the wiki (frontmatter and body), the user's reminders
+(reminders.py, outside the wiki) and project.yaml, and writes them into the
+layout assets/board.html of the plugin, with the definition of what a board
+shows (assets/board-model.json, shared with projectwright-board).
 The result, board.html in the project root, is a single self-contained file
 (no network, no external libraries) to open in a browser. It is generated: it is
 never edited and never versioned (it is in .gitignore).
@@ -43,6 +44,10 @@ def collect(root, project):
     query = load_script("wiki_query_mod", "wiki-query.py")
     tasks = [query.task_detail(root, r) for r in query.records(root, project) if r.get("type") == "task"]
     tasks.sort(key=lambda t: t["name"])
+    try:
+        reminders = load_script("reminders_mod", "reminders.py").listed(root)
+    except Exception:
+        reminders = []  # an unreadable file of reminders never stops the board
     return {
         "project": {"name": pwlib.get(project, "project.name") or Path(root).name,
                     "version": pwlib.get(project, "framework.version") or "?",
@@ -50,6 +55,7 @@ def collect(root, project):
                     "generated": datetime.datetime.now().strftime("%Y-%m-%d %H:%M")},
         "model": json.loads(MODEL.read_text(encoding="utf-8")),
         "tasks": tasks,
+        "reminders": reminders,
     }
 
 

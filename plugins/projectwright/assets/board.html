@@ -103,6 +103,17 @@ dd { margin: 0; min-width: 0; }
 a.wl { color: var(--accent); cursor: pointer; text-decoration: none; }
 a.wl:hover { text-decoration: underline; }
 .plain { color: var(--muted); }
+.reminders { display: grid; gap: 2px; }
+.reminders[hidden] { display: none; }
+.reminders .rhead { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.reminders .late { color: var(--red-fg); font-size: 13px; }
+.reminder { display: flex; align-items: baseline; gap: 10px; padding: 3px 6px; border-radius: 4px; font-size: 14px; }
+.reminder .box { width: 14px; height: 14px; flex: none; border: 1.5px solid var(--faint); border-radius: 3px; transform: translateY(2px); }
+.reminder.done { color: var(--faint); text-decoration: line-through; }
+.reminder.done .box { background: var(--accent); border-color: var(--accent); }
+.reminder .due { margin-left: auto; color: var(--faint); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.reminder .due.late { color: var(--red-fg); }
+@media (prefers-color-scheme: dark) { .reminders .late, .reminder .due.late { color: #ff8a80; } }
 </style>
 </head>
 <body>
@@ -113,6 +124,7 @@ a.wl:hover { text-decoration: underline; }
     <div class="meta" id="meta"></div>
   </div>
   <div class="progress" id="progress"></div>
+  <div class="reminders" id="reminders" hidden></div>
   <div class="views">
     <button data-view="board">Board</button>
     <button data-view="table">Table</button>
@@ -282,6 +294,27 @@ function render() {
   try { localStorage.setItem("pw-board-view", state.view); } catch (e) { /* storage not available */ }
 }
 
+// The reminders of the user (reminders.py, outside the wiki): a checklist to read, as the pane shows it.
+function today() {
+  var d = new Date();
+  return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2);
+}
+function reminders() {
+  var list = DATA.reminders || [], el = document.getElementById("reminders");
+  if (!list.length) { el.hidden = true; return; }
+  var open = list.filter(function (r) { return !r.done_on; });
+  var late = open.filter(function (r) { return r.due && r.due < today(); });
+  el.innerHTML = '<div class="rhead">' + chip("Reminders " + open.length, "yellow") +
+    (late.length ? '<span class="late">' + late.length + " overdue</span>" : "") + "</div>" +
+    list.map(function (r) {
+      var isLate = !r.done_on && r.due && r.due < today();
+      var due = r.due ? (r.due === today() ? "today" : r.due.slice(8, 10) + "/" + r.due.slice(5, 7)) : "";
+      return '<div class="reminder' + (r.done_on ? " done" : "") + '"><span class="box" aria-hidden="true"></span><span>' + esc(r.text) +
+             "</span>" + (due ? '<span class="due' + (isLate ? " late" : "") + '">' + esc(due) + "</span>" : "") + "</div>";
+    }).join("");
+  el.hidden = false;
+}
+
 function progressBar() {
   document.getElementById("progress").innerHTML = MODEL.columns.map(function (c) {
     var n = TASKS.filter(function (t) { return t.progress === c.progress; }).length;
@@ -311,6 +344,7 @@ document.getElementById("meta").innerHTML = "<span>" + esc(DATA.project.name) + 
   TASKS.length + " tasks · " + done + " done</span><span>generated " + esc(DATA.project.generated) + " from the wiki</span>";
 try { state.view = localStorage.getItem("pw-board-view") || state.view; } catch (e) { /* storage not available */ }
 progressBar();
+reminders();
 render();
 </script>
 </body>

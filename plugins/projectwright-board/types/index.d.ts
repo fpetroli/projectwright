@@ -25,11 +25,42 @@ export type Model = {
   fields: Record<string, string>
 }
 
-// What the pane draws: the tasks and the model, or why there are none to show.
-export type Board = { tasks: Task[]; model?: Model; error?: string; updated?: string }
+// A change to the tasks Claude proposes, as `proposals.py list --format json` prints it.
+export type Proposal = {
+  id: string
+  kind: string
+  task?: string
+  summary: string
+  why?: string
+  items?: { title?: string; priority?: string; progress?: string; phase?: string; goal?: string }[]
+  changes?: Record<string, unknown>
+  consolidation?: string
+  status: string
+  comment?: string
+  replaces?: string
+}
 
-// The column the pane shows, and the history columns opened in full.
-export type View = { column?: string; expanded: string[] }
+// A reminder of the person, as `reminders.py list --format json` prints it.
+export type Reminder = { id: string; text: string; due?: string; created?: string; done_on?: string }
+
+// What the pane draws: the tasks, the model, the open proposals and the reminders, or why there are none to show.
+export type Board = {
+  tasks: Task[]; model?: Model; proposals?: Proposal[]; reminders?: Reminder[]; error?: string; updated?: string
+}
+
+// The new-reminder form, kept while the person fills it in.
+export type ReminderDraft = { isOpen: boolean; text: string; due: string }
+
+// Proposals accepted from the pane and not yet applied by Claude.
+export type Accepting = { id: string; sentAt: string; sentMs: number; isStale?: boolean }
+
+// The comment being written on a proposal.
+export type Commenting = { id?: string; text: string }
+
+// How the pane shows the columns: the view chosen by hand (otherwise the one the
+// width allows), the groups of the list opened or closed against their default,
+// and the history columns shown in full.
+export type View = { mode?: 'board' | 'list'; toggled: string[]; expanded: string[] }
 
 // The new-task form, kept while the person fills it in.
 export type Draft = { isOpen: boolean; title: string; priority: string; notes: string }
@@ -66,6 +97,7 @@ declare module 'claude-code' {
   interface PluginState {
     'projectwright-board': {
       board: Board; draft: Draft; pending: Pending[]; selected: Selected; edit: Edit; applying: Applying; view: View
+      accepting: Accepting[]; commenting: Commenting; reminderDraft: ReminderDraft
     }
   }
 }

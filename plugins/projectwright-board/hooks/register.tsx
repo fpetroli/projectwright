@@ -1,7 +1,10 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Applying, Board, Draft, Edit, Fields, Model, Pending, Selected, Task, TaskDetail, View } from '../types'
+import type {
+  Accepting, Applying, Board, Commenting, Draft, Edit, Fields, Model, Pending, Proposal, Reminder, ReminderDraft, Selected,
+  Task, TaskDetail, View,
+} from '../types'
 
 import { touchesWiki } from './paths'
 
@@ -16,7 +19,14 @@ const selected = atom({ plugin: 'projectwright-board', key: 'selected' } as cons
 const NO_EDIT: Edit = { bodyChange: '' }
 const edit = atom({ plugin: 'projectwright-board', key: 'edit' } as const, NO_EDIT)
 const applying = atom({ plugin: 'projectwright-board', key: 'applying' } as const, {} as Applying)
-const NO_VIEW: View = { expanded: [] }
+const NO_VIEW: View = { toggled: [], expanded: [] }
+const accepting = atom({ plugin: 'projectwright-board', key: 'accepting' } as const, [] as Accepting[])
+const NO_COMMENT: Commenting = { text: '' }
+const commenting = atom({ plugin: 'projectwright-board', key: 'commenting' } as const, NO_COMMENT)
+const NO_REMINDER: ReminderDraft = { isOpen: false, text: '', due: '' }
+const reminderDraft = atom({ plugin: 'projectwright-board', key: 'reminderDraft' } as const, NO_REMINDER)
+// The narrowest a column of the Board view can be and still hold a card.
+const MIN_COLUMN = 24
 const view = atom({ plugin: 'projectwright-board', key: 'view' } as const, NO_VIEW)
 
 // What a board shows — columns, labels, colors, the fields of a card — is
@@ -35,6 +45,13 @@ const namesIn = (v: unknown) => (Array.isArray(v) ? v.map(String) : String(v ?? 
 const idOf = (n: string) => /^(T-[A-Z0-9]+-\d+)/.exec(n)?.[1] ?? n
 
 const now = () => new Date().toTimeString().slice(0, 5)
+// Today in the person's time zone, as the reminders' dates are written: 2026-10-23.
+const isoToday = () => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+// A reminder's date as the pane shows it: "today", or 24/10.
+const day = (iso: string) => (iso === isoToday() ? 'today' : `${iso.slice(8, 10)}/${iso.slice(5, 7)}`)
 
 // The project root: the session's folder or the nearest one above it holding
 // project.yaml, so the pane still finds the project when the session's working
@@ -110,7 +127,18 @@ const load = async ($: EngineInterface): Promise<Board> => {
     const ran = await runScript($, root, dir, 'wiki-query.py', ['tasks', '--format', 'json'])
     if (ran.exitCode !== 0) return { tasks: [], error: ran.stderr.trim() || 'wiki-query failed.' }
     const tasks = JSON.parse(ran.stdout) as Task[]
-    return { tasks, model, updated: now() }
+    // Proposals and reminders wait outside the wiki; without them the board still shows the tasks.
+    const listed = async <T,>(script: string, args: string[]): Promise<T[]> => {
+      try {
+        const out = await runScript($, root, dir, script, args)
+        return out.exitCode === 0 ? JSON.parse(out.stdout) as T[] : []
+      } catch {
+        return [] // an older projectwright, or a file that cannot be read: nothing to show
+      }
+    }
+    const proposals = await listed<Proposal>('proposals.py', ['list', '--status', 'open,revising', '--format', 'json'])
+    const reminders = await listed<Reminder>('reminders.py', ['list', '--format', 'json'])
+    return { tasks, model, proposals, reminders, updated: now() }
   } catch (err) {
     return { tasks: [], error: String(err) }
   }
@@ -120,7 +148,8 @@ const name = (t: Task) => t.task.replace(/^\[\[|\]\]$/g, '')
 
 // What a refresh compares: the tasks or the error, not the time it was read.
 const sameBoard = (a: Board, b: Board) => a.error === b.error && JSON.stringify(a.tasks) === JSON.stringify(b.tasks) &&
-  JSON.stringify(a.model) === JSON.stringify(b.model)
+  JSON.stringify(a.model) === JSON.stringify(b.model) && JSON.stringify(a.proposals) === JSON.stringify(b.proposals) &&
+  JSON.stringify(a.reminders) === JSON.stringify(b.reminders)
 
 const refresh = async ($: EngineInterface) => {
   const next = await load($)
@@ -129,6 +158,9 @@ const refresh = async ($: EngineInterface) => {
   // A request is done once a task it did not know about is in the wiki.
   const names = next.tasks.map(name)
   await update($, pending, list => (list ?? []).filter(p => names.every(n => p.known.includes(n))))
+  // An accepted proposal is done once Claude has taken it off the open ones.
+  const openIds = (next.proposals ?? []).map(p => p.id)
+  await update($, accepting, list => (list ?? []).filter(a => openIds.includes(a.id)))
   // The task open in the pane follows the wiki too.
   const open = (await read($, selected)).name
   if (open) await openTask($, open)
@@ -266,6 +298,85 @@ const injectTask = async ($: EngineInterface, t: Task) => {
   $.ui.toast(`board: ${id} sent to Claude`)
 }
 
+// Runs a script of projectwright that keeps the person's own data, outside the
+// wiki: the proposals they answer and their reminders.
+const runOwn = async ($: EngineInterface, script: string, args: string[]) => {
+  const root = await findRoot($)
+  if (root === undefined) return false
+  const { dir, error } = await projectwright($, root)
+  if (dir === undefined) {
+    $.ui.toast(`board: ${error ?? 'projectwright not found'}`)
+    return false
+  }
+  const ran = await runScript($, root, dir, script, args)
+  if (ran.exitCode !== 0) $.ui.toast(`board: ${ran.stderr.trim().replace(/^ERROR: /, '') || `${script} failed`}`)
+  return ran.exitCode === 0
+}
+
+// The proposals of Claude (proposals.py, outside the wiki). Accepting and
+// commenting go to Claude, which changes the wiki or proposes again; rejecting
+// is the person's answer alone, so the pane marks it without a turn of Claude.
+// The id of a proposal is for the tools: it closes the message, as a reference.
+const setProposal = ($: EngineInterface, id: string, args: string[]) => runOwn($, 'proposals.py', ['set', id, ...args])
+const about = (p: Proposal) => `the proposal “${p.summary}”${p.task ? ` on ${idOf(p.task)}` : ''}`
+
+const acceptProposal = async ($: EngineInterface, p: Proposal) => {
+  // A reminder changes nothing in the wiki: the pane adds it, without a turn of Claude.
+  if (p.kind === 'remind') {
+    for (const item of p.items ?? []) {
+      if (!(await runOwn($, 'reminders.py', ['add', item.title ?? p.summary, ...(item.due ? ['--due', item.due] : [])]))) return
+    }
+    if (await setProposal($, p.id, ['--status', 'accepted'])) $.ui.toast('board: reminder added')
+    await refresh($)
+    return
+  }
+  await update($, accepting, list => [...(list ?? []), { id: p.id, sentAt: now(), sentMs: Date.now() }])
+  await askClaude($, `Apply ${about(p)} with /projectwright:manage-tasks. I accept it as it is; then mark it accepted. [ref ${p.id}]`)
+  $.ui.toast('board: sent to Claude')
+}
+
+const rejectProposal = async ($: EngineInterface, p: Proposal) => {
+  if (await setProposal($, p.id, ['--status', 'rejected'])) {
+    $.ui.toast('board: proposal rejected')
+    await refresh($)
+  }
+}
+
+const commentProposal = async ($: EngineInterface, p: Proposal, text: string) => {
+  const comment = text.trim()
+  if (comment === '') {
+    $.ui.toast('board: write the comment first')
+    return
+  }
+  if (!(await setProposal($, p.id, ['--status', 'revising', '--comment', comment]))) return
+  await update($, commenting, () => NO_COMMENT)
+  await refresh($)
+  await askClaude($, `Revise ${about(p)} with /projectwright:manage-tasks on my comment: ${comment} [ref ${p.id}]`)
+}
+
+// The reminders of the person (reminders.py, outside the wiki): the pane adds,
+// ticks and removes them by itself. Turning one into a task goes to Claude, as a proposal.
+const addReminder = async ($: EngineInterface, form: ReminderDraft) => {
+  const text = form.text.trim()
+  if (text === '') {
+    $.ui.toast('board: the reminder needs a text')
+    return
+  }
+  if (!(await runOwn($, 'reminders.py', ['add', text, ...(form.due.trim() ? ['--due', form.due.trim()] : [])]))) return
+  await update($, reminderDraft, () => NO_REMINDER)
+  await refresh($)
+}
+
+const changeReminder = async ($: EngineInterface, r: Reminder, action: 'done' | 'undo' | 'remove') => {
+  if (await runOwn($, 'reminders.py', [action, r.id])) await refresh($)
+}
+
+const reminderToTask = async ($: EngineInterface, r: Reminder) => {
+  await askClaude($, `Propose a task from my reminder “${r.text}”${r.due ? ` (due ${r.due})` : ''} with /projectwright:manage-tasks; ` +
+    `once I accept the task, remove the reminder. [ref ${r.id}]`)
+  $.ui.toast('board: sent to Claude')
+}
+
 // How often the pane looks at the wiki by itself, for the changes made outside
 // Claude (by hand, in an editor): the scripts run only when the pane is shown.
 const POLL_MS = 30_000
@@ -283,6 +394,7 @@ let turnStartedMs = 0
 const flagStale = async ($: EngineInterface) => {
   await update($, pending, list => (list ?? []).map(p => (p.sentMs <= turnStartedMs ? { ...p, isStale: true } : p)))
   await update($, applying, a => (a?.name && (a.sentMs ?? 0) <= turnStartedMs ? { ...a, isStale: true } : a ?? {}))
+  await update($, accepting, list => (list ?? []).map(a => (a.sentMs <= turnStartedMs ? { ...a, isStale: true } : a)))
 }
 
 export const register: Register = on => {
@@ -351,7 +463,7 @@ export const register: Register = on => {
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const elements = $.ui.resolve(e)
     const { Box, Text, Button } = elements
-    const { tasks, model, error, updated } = await read($, board)
+    const { tasks, model, proposals = [], reminders = [], error, updated } = await read($, board)
     const form = await read($, draft)
     const sent = (await read($, pending)) ?? []
     const width = Math.max(10, e.props.bodyColumns - 2)
@@ -371,9 +483,11 @@ export const register: Register = on => {
     const Select = 'Select' in elements ? elements.Select : undefined
     const setDraft = (change: Partial<Draft>) => void update($, draft, d => ({ ...(d ?? EMPTY), ...change }))
     const creator = !Input || !Select ? undefined : !form.isOpen ? (
-      <Box marginBottom={1}>
+      <Box flexDirection="row" gap={1} marginBottom={1}>
         <Button key="open-form" hotkey="n" variant="primary"
           onPress={() => setDraft({ isOpen: true })}>+ New task</Button>
+        <Button key="open-reminder" hotkey="r"
+          onPress={() => void update($, reminderDraft, d => ({ ...NO_REMINDER, ...(d ?? {}), isOpen: true }))}>+ Reminder</Button>
       </Box>
     ) : (
       <Box key="form" flexDirection="column" borderStyle="round" borderColor="claude"
@@ -583,47 +697,228 @@ export const register: Register = on => {
     }
 
     // A task: its title, then the other fields of the card, in its column's frame.
-    const card = (t: Task, color: string) => (
+    // In a narrow column the title takes the whole width and ⇢ closes the fields.
+    const card = (t: Task, color: string, isNarrow = false) => (
       <Box key={name(t)} flexDirection="column" borderStyle="round" borderColor={colorOf(color)} paddingX={1}>
         <Box flexDirection="row" justifyContent="space-between" gap={1}>
           <Box flexShrink={1}>
             {opener(t, <Text bold strikethrough={t.progress === 'cancelled'} wrap="wrap">{split(t).title}</Text>)}
           </Box>
-          {inject(t)}
+          {!isNarrow && inject(t)}
         </Box>
         <Box flexDirection="row" flexWrap="wrap" columnGap={1}>
           {model.card.filter(f => f !== 'title').map(f => cardField(t, f))}
+          {isNarrow && inject(t)}
         </Box>
       </Box>
     )
 
-    // One column at a time: the columns as tabs with their count, a digit for each.
+    // Two views of the same columns, as board.html has Board and Table: Board,
+    // the columns side by side, when the pane is wide enough for them; List,
+    // the columns one under the other, each a group that opens and closes.
+    // `v` swaps them by hand.
     const columns = columnsShown(model, tasks)
-    const shownView = await read($, view)
-    const current = columns.find(c => c.progress === shownView.column) ??
-      columns.find(c => tasks.some(t => t.progress === c.progress)) ?? columns[0]
-    const tabs = (
-      <Box flexDirection="row" flexWrap="wrap" columnGap={2} marginBottom={1}>
-        {columns.map((c, i) => {
-          const n = tasks.filter(t => t.progress === c.progress).length
+    // The state a pane of an earlier version left in the session may lack fields: the defaults fill them.
+    const shownView: View = { ...NO_VIEW, ...(await read($, view)) }
+    // In the board an empty column is only its heading, on a line above the
+    // others: the columns with tasks share the whole width.
+    const count = (progress: string) => tasks.filter(t => t.progress === progress).length
+    const empty = columns.filter(c => count(c.progress) === 0)
+    const filled = columns.filter(c => count(c.progress) > 0)
+    const room = width - Math.max(0, filled.length - 1)
+    const fits = room >= filled.length * MIN_COLUMN
+    const mode = shownView.mode ?? (fits ? 'board' : 'list')
+    const columnWidth = Math.max(12, Math.floor(room / Math.max(1, filled.length)))
+    const isNarrow = columnWidth < 2 * MIN_COLUMN
+    const set = (change: (v: View) => Partial<View>) => void update($, view, v => {
+      const was = { ...NO_VIEW, ...v }
+      return { ...was, ...change(was) }
+    })
+    // A history column starts closed in the list; pressing its heading flips it.
+    const isOpen = (progress: string) => model.history.columns.includes(progress) === shownView.toggled.includes(progress)
+    const toggle = (progress: string) => set(v => ({
+      toggled: v.toggled.includes(progress) ? v.toggled.filter(x => x !== progress) : [...v.toggled, progress],
+    }))
+    const more = (progress: string, n: number) => (
+      <Button key={`more-${progress}`} dimColor plain onPress={() => set(v => ({ expanded: [...v.expanded, progress] }))}>
+        + {n} more
+      </Button>
+    )
+    // In a narrow column of the board the dot gives way, so the heading stays on one line.
+    const heading = (c: Model['columns'][number], n: number, isNarrow = false) => (
+      <Text color={colorOf(c.color)} inverse bold> {isNarrow ? '' : '● '}{c.label} {n} </Text>
+    )
+
+    const boardView = (
+      <Box flexDirection="column">
+        {empty.length > 0 && (
+          <Box flexDirection="row" flexWrap="wrap" columnGap={1} marginBottom={1}>
+            {empty.map(c => <Box key={`board-${c.progress}`}>{heading(c, 0, true)}</Box>)}
+          </Box>
+        )}
+        <Box flexDirection="row" gap={1}>
+          {filled.map(c => {
+            const group = columnTasks(model, tasks, c.progress, shownView.expanded.includes(c.progress))
+            return (
+              <Box key={`board-${c.progress}`} flexDirection="column" width={columnWidth}>
+                <Box marginBottom={1}>{heading(c, group.items.length, isNarrow)}</Box>
+                {group.shown.map(t => card(t, c.color, isNarrow))}
+                {group.shown.length < group.items.length && more(c.progress, group.items.length - group.shown.length)}
+              </Box>
+            )
+          })}
+        </Box>
+      </Box>
+    )
+
+    const listView = (
+      <Box flexDirection="column">
+        {columns.map(c => {
+          const group = columnTasks(model, tasks, c.progress, shownView.expanded.includes(c.progress))
+          const opened = isOpen(c.progress) && group.items.length > 0
           return (
-            <Button key={`column-${c.progress}`} plain hotkey={i < 9 ? String(i + 1) : undefined}
-              onPress={() => void update($, view, v => ({ ...(v ?? NO_VIEW), column: c.progress }))}>
-              {c.progress === current?.progress
-                ? <Text color={colorOf(c.color)} inverse bold> ● {c.label} {n} </Text>
-                : <Text color={colorOf(c.color)}>{c.label} <Text dimColor>{n}</Text></Text>}
-            </Button>
+            <Box key={`list-${c.progress}`} flexDirection="column" marginBottom={1}>
+              <Button key={`group-${c.progress}`} plain onPress={() => toggle(c.progress)}>
+                <Text dimColor>{group.items.length === 0 ? ' ' : opened ? '▾' : '▸'} </Text>{heading(c, group.items.length)}
+              </Button>
+              {opened && group.shown.map(t => card(t, c.color))}
+              {opened && group.shown.length < group.items.length && more(c.progress, group.items.length - group.shown.length)}
+            </Box>
           )
         })}
       </Box>
     )
-    const isExpanded = current !== undefined && shownView.expanded.includes(current.progress)
-    const group = current ? columnTasks(model, tasks, current.progress, isExpanded) : { items: [], shown: [] }
+
+    // The proposals of Claude, above the columns: what each one changes and why,
+    // to accept, reject or comment. Without proposals the section is not drawn.
+    const accepted = (await read($, accepting)) ?? []
+    const comment = await read($, commenting)
+    const KIND: Record<string, string> = {
+      create: 'NEW TASK', move: 'MOVE', close: 'CLOSE', cancel: 'CANCEL', split: 'SPLIT', edit: 'EDIT', remind: 'REMINDER',
+    }
+    const proposal = (p: Proposal) => {
+      const sent = accepted.find(a => a.id === p.id)
+      // A proposal of one item that says what its summary says draws it once, with its date.
+      const items = p.items ?? []
+      const single = items.length === 1 && items[0]?.title === p.summary ? items[0] : undefined
+      const isWriting = comment.id === p.id && Input !== undefined
+      return (
+        <Box key={`proposal-${p.id}`} flexDirection="column" borderStyle="single" borderColor="claude" paddingX={1}>
+          <Text wrap="wrap">
+            <Text bold color="claude">{KIND[p.kind] ?? p.kind.toUpperCase()}</Text>
+            {p.task && <Text dimColor>  {idOf(p.task)}</Text>}
+          </Text>
+          <Text bold wrap="wrap">
+            {p.summary}{single?.due && <Text dimColor>  by {day(single.due)}</Text>}
+          </Text>
+          {!single && (p.items ?? []).length > 0 && (p.kind === 'split' || p.kind === 'remind' || (p.items ?? []).length > 1) &&
+            (p.items ?? []).map((item, i) => (
+              <Text key={`item-${i}`} wrap="wrap">· {item.title ?? ''}{item.due && <Text dimColor>  by {day(item.due)}</Text>}</Text>
+            ))}
+          {p.consolidation && <Text color="subtle" wrap="wrap">Consolidation: {p.consolidation}</Text>}
+          {p.why && <Text color="subtle" wrap="wrap">Why: {p.why}</Text>}
+          {p.status === 'revising' ? (
+            <Text color="claude" wrap="wrap">◌ Claude is revising it on your comment: “{p.comment ?? ''}”</Text>
+          ) : sent ? (
+            <Text color={sent.isStale ? 'warning' : 'claude'} wrap="wrap">
+              {sent.isStale ? `◌ Not applied yet: Claude may be waiting for you · ${sent.sentAt}` : `◌ Claude is applying it · ${sent.sentAt}`}
+            </Text>
+          ) : isWriting && Input ? (
+            <Box flexDirection="column">
+              <Input key={`comment-${p.id}`} label="Comment" rows={2} autoFocus value={comment.text}
+                placeholder="split it, change its goal, its progress…"
+                onInput={text => void update($, commenting, c => ({ ...(c ?? NO_COMMENT), text }))}
+                onSubmit={text => void commentProposal($, p, text)} />
+              <Box flexDirection="row" gap={1}>
+                <Button key={`send-${p.id}`} variant="primary" onPress={() => void commentProposal($, p, comment.text)}>
+                  Send to Claude
+                </Button>
+                <Button key={`cancel-comment-${p.id}`} role="dismiss" onPress={() => void update($, commenting, () => NO_COMMENT)}>
+                  Cancel
+                </Button>
+              </Box>
+            </Box>
+          ) : (
+            <Box flexDirection="row" flexWrap="wrap" columnGap={1}>
+              <Button key={`accept-${p.id}`} variant="primary" onPress={() => void acceptProposal($, p)}>✓ Accept</Button>
+              <Button key={`reject-${p.id}`} dimColor onPress={() => void rejectProposal($, p)}>✕ Reject</Button>
+              {Input && (
+                <Button key={`comment-open-${p.id}`} onPress={() => void update($, commenting, () => ({ id: p.id, text: '' }))}>
+                  💬 Comment
+                </Button>
+              )}
+            </Box>
+          )}
+        </Box>
+      )
+    }
+    // The reminders of the person, below the proposals: a checklist with an
+    // optional date, red once it has passed. Ticked ones stay, struck through, until the next day.
+    const draftReminder = await read($, reminderDraft)
+    const openReminders = reminders.filter(r => !r.done_on)
+    const overdue = openReminders.filter(r => r.due !== undefined && r.due < isoToday())
+    const reminderRow = (r: Reminder) => {
+      const isLate = !r.done_on && r.due !== undefined && r.due < isoToday()
+      return (
+        <Box key={`reminder-${r.id}`} flexDirection="row" justifyContent="space-between" gap={1}>
+          <Box flexDirection="row" flexShrink={1} gap={1}>
+            <Button key={`tick-${r.id}`} plain onPress={() => void changeReminder($, r, r.done_on ? 'undo' : 'done')}>
+              {r.done_on ? '☑' : '☐'}
+            </Button>
+            <Box flexShrink={1}>
+              <Text wrap="wrap" strikethrough={Boolean(r.done_on)} dimColor={Boolean(r.done_on)}>{r.text}</Text>
+            </Box>
+          </Box>
+          <Box flexDirection="row" gap={1} flexShrink={0}>
+            {r.due && <Text color={isLate ? 'error' : 'subtle'}>{day(r.due)}</Text>}
+            {!r.done_on && <Button key={`totask-${r.id}`} plain dimColor onPress={() => void reminderToTask($, r)}>→</Button>}
+            <Button key={`remove-${r.id}`} plain dimColor onPress={() => void changeReminder($, r, 'remove')}>✕</Button>
+          </Box>
+        </Box>
+      )
+    }
+    const setReminder = (change: Partial<ReminderDraft>) =>
+      void update($, reminderDraft, d => ({ ...NO_REMINDER, ...(d ?? {}), ...change }))
+    const reminderForm = Input && draftReminder.isOpen && (
+      <Box key="reminder-form" flexDirection="column" borderStyle="round" borderColor="warning" paddingX={1}>
+        <Input key="reminder-text" label="Reminder" placeholder="what to keep in mind" autoFocus value={draftReminder.text}
+          onInput={text => setReminder({ text })} onSubmit={text => void addReminder($, { ...draftReminder, text })} />
+        <Input key="reminder-due" label="Date" placeholder="optional: 27/10 or 2026-10-27" value={draftReminder.due}
+          onInput={due => setReminder({ due })} onSubmit={due => void addReminder($, { ...draftReminder, due })} />
+        <Box flexDirection="row" gap={1}>
+          <Button key="reminder-add" variant="primary" onPress={() => void addReminder($, draftReminder)}>Add</Button>
+          <Button key="reminder-cancel" role="dismiss" onPress={() => void update($, reminderDraft, () => NO_REMINDER)}>
+            Cancel
+          </Button>
+        </Box>
+      </Box>
+    )
+    const remindersSection = (reminders.length > 0 || reminderForm) && (
+      <Box flexDirection="column" marginBottom={1}>
+        <Text>
+          <Text color="warning" inverse bold> ☐ Reminders {openReminders.length} </Text>
+          {overdue.length > 0 && <Text color="error">  {overdue.length} overdue</Text>}
+        </Text>
+        {reminderForm}
+        {reminders.map(reminderRow)}
+      </Box>
+    )
+
+    const proposed = proposals.length > 0 && (
+      <Box flexDirection="column" marginBottom={1}>
+        <Box marginBottom={1}>
+          <Text color="claude" inverse bold> ✦ Proposed by Claude {proposals.length} </Text>
+        </Box>
+        {proposals.map(proposal)}
+      </Box>
+    )
 
     return (
       <Box flexDirection="column">
         {creator}
         {waiting}
+        {proposed}
+        {remindersSection}
         {tasks.length === 0 ? <Text dimColor>No tasks in the wiki.</Text> : (
           <Box flexDirection="column">
             <Box flexDirection="row" justifyContent="space-between">
@@ -631,25 +926,22 @@ export const register: Register = on => {
                 <Text bold>{open}</Text> open
                 {blocked > 0 && <Text color="error"> · {blocked} blocked</Text>}
               </Text>
-              <Text color="success">{done}/{tasks.length} done</Text>
+              <Box flexDirection="row" gap={2}>
+                <Text color="success">{done}/{tasks.length} done</Text>
+                <Button key="view" plain hotkey="v" onPress={() => set(() => ({ mode: mode === 'board' ? 'list' : 'board' }))}>
+                  {mode === 'board' ? 'List' : 'Board'}
+                </Button>
+              </Box>
             </Box>
             <Box flexDirection="row" marginBottom={1}>
               {bar(model, tasks, width).map(s => (
                 <Text color={colorOf(s.color)}>{'━'.repeat(s.cells)}</Text>
               ))}
             </Box>
-            {tabs}
-            {group.items.length === 0 && <Text dimColor>No tasks in {current?.label ?? 'this column'}.</Text>}
-            {group.shown.map(t => card(t, current?.color ?? ''))}
-            {group.shown.length < group.items.length && (
-              <Button key="more" dimColor plain
-                onPress={() => void update($, view, v => ({ ...(v ?? NO_VIEW), expanded: [...(v?.expanded ?? []), current?.progress ?? ''] }))}>
-                + {group.items.length - group.shown.length} more
-              </Button>
-            )}
+            {mode === 'board' ? boardView : listView}
           </Box>
         )}
-        <Text dimColor>{updated ? `updated ${updated} · ` : ''}1–{Math.min(columns.length, 9)} column · n new task · /board refresh</Text>
+        <Text dimColor>{updated ? `updated ${updated} · ` : ''}v {mode === 'board' ? 'list' : 'board'} · n new task · /board refresh</Text>
       </Box>
     )
   })

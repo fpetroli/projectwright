@@ -282,3 +282,100 @@ export const MODEL: Record<string, unknown> = {
     "blocked_by": "Blocked by"
   }
 }
+
+export const PROPOSALS: Record<string, unknown>[] = [
+  {
+    "id": "P-0001",
+    "kind": "create",
+    "summary": "Address book",
+    "why": "The checkout asks for an address every time.",
+    "items": [
+      {
+        "title": "Address book",
+        "priority": "medium"
+      }
+    ],
+    "status": "open",
+    "created": "2026-01-20T10:00:00",
+    "updated": "2026-01-20T10:00:00"
+  },
+  {
+    "id": "P-0002",
+    "kind": "move",
+    "task": "T-WEB-0003-order-history",
+    "summary": "Blocked -> To do",
+    "why": "The payment step is done.",
+    "changes": {
+      "progress": "todo"
+    },
+    "status": "revising",
+    "created": "2026-01-20T10:00:00",
+    "updated": "2026-01-20T10:00:00",
+    "comment": "Not blocked: later"
+  },
+  {
+    "id": "P-0003",
+    "kind": "split",
+    "task": "T-WEB-0002-payment-step",
+    "summary": "Split the payment step in two",
+    "why": "Cards and bank transfers go to different providers.",
+    "items": [
+      {
+        "title": "Card payments"
+      },
+      {
+        "title": "Bank transfers"
+      }
+    ],
+    "status": "open",
+    "created": "2026-01-20T10:00:00",
+    "updated": "2026-01-20T10:00:00"
+  },
+  {
+    "id": "P-0004",
+    "kind": "close",
+    "task": "T-WEB-0001-checkout-page",
+    "summary": "In progress -> Done",
+    "why": "Its criteria are met.",
+    "consolidation": "How the checkout works moves to the note of the web component.",
+    "status": "open",
+    "created": "2026-01-20T10:00:00",
+    "updated": "2026-01-20T10:00:00"
+  },
+  {
+    "id": "P-0005",
+    "kind": "remind",
+    "summary": "Ask the provider for test cards",
+    "why": "The payment step needs them.",
+    "items": [
+      {
+        "title": "Ask the provider for test cards",
+        "due": "2026-01-26"
+      }
+    ],
+    "status": "open",
+    "created": "2026-01-20T10:00:00",
+    "updated": "2026-01-20T10:00:00"
+  }
+]
+
+export const REMINDERS: Record<string, unknown>[] = [
+  {
+    "id": "R-0001",
+    "text": "Send the release notes to the reviewers",
+    "due": "2026-01-23",
+    "created": "2026-01-20"
+  },
+  {
+    "id": "R-0002",
+    "text": "Renew the payment provider key",
+    "created": "2026-01-20"
+  },
+  {
+    "id": "R-0003",
+    "text": "Book the demo",
+    "due": "2026-01-21",
+    "created": "2026-01-20",
+    "done_on": "2026-01-20"
+  }
+]

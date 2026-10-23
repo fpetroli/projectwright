@@ -40,6 +40,8 @@ type Engine = {
   tasks?: unknown[] | (() => unknown[])
   pythons?: string[]
   model?: string | null
+  proposals?: Record<string, unknown>[]
+  reminders?: Record<string, unknown>[]
 }
 
 // Nothing sits beneath the plugin: these hooks stand for the engine, with a
@@ -78,6 +80,33 @@ const engine = (on: any, opts: Engine = {}) => {
     const argv = [...e.argv] as string[]
     if (!pythons.includes(argv[0] ?? '')) throw new Error(`${argv[0]}: not found`)
     ran.push(argv)
+    // proposals.py: the proposals of the test, answered and changed in memory
+    if (String(argv[1]).endsWith('/proposals.py')) {
+      const store = opts.proposals ?? []
+      if (argv[2] === 'set') {
+        const p = store.find(x => x.id === argv[3])
+        if (p) Object.assign(p, { status: argv[5] }, argv[6] === '--comment' ? { comment: argv[7] } : {})
+        return { value: { exitCode: 0, stdout: '', stderr: '' } }
+      }
+      const open = store.filter(p => p.status === 'open' || p.status === 'revising')
+      return { value: { exitCode: 0, stdout: JSON.stringify(open), stderr: '' } }
+    }
+    // reminders.py: the reminders of the test, in memory too
+    if (String(argv[1]).endsWith('/reminders.py')) {
+      const store = opts.reminders ?? []
+      if (argv[2] === 'add') {
+        if (argv[4] === '--due' && !/^\d{4}-\d{2}-\d{2}$|^\d{1,2}\/\d{1,2}$/.test(argv[5] ?? '')) {
+          return { value: { exitCode: 1, stdout: '', stderr: `ERROR: not a date: ${argv[5]}` } }
+        }
+        store.push({ id: `R-${store.length + 1}`, text: argv[3], ...(argv[4] === '--due' ? { due: argv[5] } : {}) })
+      } else if (argv[2] !== 'list') {
+        const r = store.find(x => x.id === argv[3])
+        if (argv[2] === 'done' && r) r.done_on = '2026-10-23'
+        if (argv[2] === 'undo' && r) delete r.done_on
+        if (argv[2] === 'remove' && r) store.splice(store.indexOf(r), 1)
+      }
+      return { value: { exitCode: 0, stdout: argv[2] === 'list' ? JSON.stringify(store) : '', stderr: '' } }
+    }
     const tasks = typeof opts.tasks === 'function' ? opts.tasks() : opts.tasks ?? TASKS
     const stdout = argv[2] === 'task' ? JSON.stringify(DETAIL) : JSON.stringify(tasks)
     return { value: { exitCode: 0, stdout, stderr: '' } }
@@ -94,18 +123,204 @@ test('the pane groups the tasks wiki-query answers, with their titles, on every 
 
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
-    // the first column with tasks is shown, the others are tabs; the choice outlives the mount
-    if (surface === 'terminal') expect(await ui.find({ key: 'open-T-WEB-0001-checkout-page' })).toBeDefined()
-    else await ui.press({ key: 'column-in-progress' })
-    expect((await ui.find({ key: 'column-in-progress' }))?.text).toContain('In progress 1')
+    // a narrow pane lists the columns one under the other, each a group that opens and closes
+    expect((await ui.find({ key: 'group-in-progress' }))?.text).toContain('In progress 1')
     expect((await ui.find({ key: 'open-T-WEB-0001-checkout-page' }))?.text).toContain('Checkout page')
-    expect(await ui.find({ key: 'open-T-WEB-0002-payment-step' })).toBeUndefined()
-    await ui.press({ key: 'column-todo' })
     expect((await ui.find({ key: 'open-T-WEB-0002-payment-step' }))?.text).toContain('Payment step')
-    expect(await ui.find({ key: 'open-T-WEB-0001-checkout-page' })).toBeUndefined()
+    await ui.press({ key: 'group-todo' })
+    expect(await ui.find({ key: 'open-T-WEB-0002-payment-step' })).toBeUndefined()
+    await ui.press({ key: 'group-todo' })
+    expect(await ui.find({ key: 'open-T-WEB-0002-payment-step' })).toBeDefined()
     await ui.unmount()
   }
   expect(ran[0]).toEqual(['python3', '/plugin/scripts/wiki-query.py', 'tasks', '--format', 'json', '--root', '/project'])
+})
+
+const PROPOSED = () => [
+  { id: 'P-0001', kind: 'create', summary: 'Address book', why: 'Asked at every checkout.', status: 'open',
+    items: [{ title: 'Address book', priority: 'medium' }] },
+  { id: 'P-0002', kind: 'move', task: 'T-WEB-0001-checkout-page', summary: 'In progress -> Done', status: 'open',
+    changes: { progress: 'done' } },
+]
+
+test('the proposals of Claude are drawn above the columns, and only when there are some', async ($, on) => {
+  engine(on, { proposals: PROPOSED() })
+  await start($)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /Proposed by Claude 2/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Address book' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^Why: Asked at every checkout\.$/ })).toBeDefined()
+  for (const key of ['accept-P-0001', 'reject-P-0001', 'comment-open-P-0001', 'accept-P-0002']) {
+    expect(await ui.find({ key })).toBeDefined()
+  }
+  await ui.unmount()
+})
+
+test('without proposals there is no section for them', async ($, on) => {
+  engine(on)
+  await start($)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /Proposed by Claude/ })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('accepting a proposal asks Claude to apply it, and says so until Claude has', async ($, on) => {
+  const { sent, written } = engine(on, { proposals: PROPOSED() })
+  await start($)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'accept-P-0002' })
+  expect(sent.length).toBe(1)
+  expect(sent[0]).toContain('Apply the proposal “In progress -> Done” on T-WEB-0001 with /projectwright:manage-tasks.')
+  // the id is for Claude: only at the end, as a reference
+  expect(sent[0]).toMatch(/\[ref P-0002\]$/)
+  expect(written.length).toBe(0)
+  expect(await ui.find({ type: 'Text', text: /Claude is applying it/ })).toBeDefined()
+  // Claude's turn ends and the proposal is still open
+  await $.turn.start({ text: sent[0] ?? '', turnId: 't1' })
+  await $.turn.complete({ turnId: 't1', reason: 'answer', answer: 'Which commit?', durationMs: 900, isAborted: false })
+  expect(await ui.find({ type: 'Text', text: /Not applied yet: Claude may be waiting for you/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('rejecting a proposal needs no turn of Claude: the pane marks it', async ($, on) => {
+  const proposals = PROPOSED()
+  const { sent, ran } = engine(on, { proposals })
+  await start($)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'reject-P-0001' })
+  expect(sent.length).toBe(0)
+  expect(ran.some(a => a.includes('/plugin/scripts/proposals.py') && a.includes('rejected'))).toBe(true)
+  expect(proposals[0]?.status).toBe('rejected')
+  expect(await ui.find({ type: 'Text', text: 'Address book' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('a comment goes to Claude, which proposes again; the card says it is being revised', async ($, on) => {
+  const proposals = PROPOSED()
+  const { sent } = engine(on, { proposals })
+  await start($)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'comment-open-P-0001' })
+  // nothing written yet: nothing is sent
+  await ui.press({ key: 'send-P-0001' })
+  expect(sent.length).toBe(0)
+  await ui.input({ key: 'comment-P-0001', text: 'make it part of the checkout task', kind: 'change' })
+  await ui.press({ key: 'send-P-0001' })
+  expect(proposals[0]).toMatchObject({ status: 'revising', comment: 'make it part of the checkout task' })
+  expect(sent.length).toBe(1)
+  expect(sent[0]).toContain('Revise the proposal “Address book” with /projectwright:manage-tasks on my comment: make it part of the checkout task [ref P-0001]')
+  expect(await ui.find({ type: 'Text', text: /Claude is revising it on your comment/ })).toBeDefined()
+  expect(await ui.find({ key: 'accept-P-0001' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('the cards of the proposals never show their ids', async ($, on) => {
+  engine(on, { proposals: PROPOSED() })
+  await start($)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /P-000/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /T-WEB-0001/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('a proposed reminder, accepted, joins the reminders without a turn of Claude', async ($, on) => {
+  const proposals = [{ id: 'P-0003', kind: 'remind', summary: 'Ask for the Windows logs', status: 'open',
+    items: [{ title: 'Ask for the Windows logs', due: '2026-10-31' }] }]
+  const reminders: Record<string, unknown>[] = []
+  const { sent } = engine(on, { proposals, reminders })
+  await start($)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /REMINDER/ })).toBeDefined()
+  await ui.press({ key: 'accept-P-0003' })
+  expect(sent.length).toBe(0)
+  expect(reminders).toEqual([{ id: 'R-1', text: 'Ask for the Windows logs', due: '2026-10-31' }])
+  expect(proposals[0]?.status).toBe('accepted')
+  expect(await ui.find({ type: 'Text', text: /Reminders 1/ })).toBeDefined()
+  await ui.unmount()
+})
+
+const REMINDED = () => [
+  { id: 'R-0001', text: 'Send the e-mail on the test', due: '2020-01-02' },
+  { id: 'R-0002', text: 'Renew the login' },
+  { id: 'R-0003', text: 'Commit the project folder', done_on: '2026-10-23' },
+]
+
+test('the reminders are a checklist: the open ones counted, the late ones red, the ticked ones struck through', async ($, on) => {
+  engine(on, { reminders: REMINDED() })
+  await start($)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /Reminders 2/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /1 overdue/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '02/01' })).toBeDefined()
+  expect((await ui.find({ key: 'tick-R-0001' }))?.text).toContain('☐')
+  expect((await ui.find({ key: 'tick-R-0003' }))?.text).toContain('☑')
+  // a ticked reminder cannot become a task
+  expect(await ui.find({ key: 'totask-R-0003' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('without reminders there is no section, only the button to add one', async ($, on) => {
+  engine(on)
+  await start($)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /Reminders/ })).toBeUndefined()
+  expect(await ui.find({ key: 'open-reminder' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('ticking, adding and removing a reminder need no turn of Claude', async ($, on) => {
+  const reminders = REMINDED()
+  const { sent } = engine(on, { reminders })
+  await start($)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'tick-R-0002' })
+  expect(reminders[1]?.done_on).toBe('2026-10-23')
+  await ui.press({ key: 'remove-R-0003' })
+  expect(reminders.map(r => r.id)).not.toContain('R-0003')
+  await ui.press({ key: 'open-reminder' })
+  await ui.input({ key: 'reminder-text', text: 'Update the specification', kind: 'change' })
+  await ui.input({ key: 'reminder-due', text: '31/10', kind: 'change' })
+  await ui.press({ key: 'reminder-add' })
+  expect(reminders.at(-1)).toMatchObject({ text: 'Update the specification', due: '31/10' })
+  expect(sent.length).toBe(0)
+  await ui.unmount()
+})
+
+test('a date the script refuses keeps the form open, and says why', async ($, on) => {
+  const reminders: Record<string, unknown>[] = []
+  engine(on, { reminders })
+  await start($)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'open-reminder' })
+  await ui.input({ key: 'reminder-text', text: 'Call back', kind: 'change' })
+  await ui.input({ key: 'reminder-due', text: 'someday', kind: 'change' })
+  await ui.press({ key: 'reminder-add' })
+  expect(reminders.length).toBe(0)
+  expect(await ui.find({ key: 'reminder-text' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('a reminder becomes a task through Claude, as a proposal', async ($, on) => {
+  const { sent } = engine(on, { reminders: REMINDED() })
+  await start($)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'totask-R-0001' })
+  expect(sent.length).toBe(1)
+  expect(sent[0]).toContain('Propose a task from my reminder “Send the e-mail on the test” (due 2020-01-02)')
+  expect(sent[0]).toMatch(/\[ref R-0001\]$/)
+  await ui.unmount()
 })
 
 test('a card shows the fields of the model: priority, assignee, what blocks it', async ($, on) => {
@@ -120,18 +335,55 @@ test('a card shows the fields of the model: priority, assignee, what blocks it',
   await ui.unmount()
 })
 
-test('done tasks show the newest few first, and the rest on request', async ($, on) => {
+test('done tasks start closed in the list, then show the newest few first, and the rest on request', async ($, on) => {
   const tasks = [1, 2, 3, 4, 5].map(n => ({ task: `[[T-WEB-000${n}-step-${n}]]`, progress: 'done', priority: 'low',
     phase: '', assignee: '', title: `Step ${n}` }))
   engine(on, { tasks })
   await start($)
 
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  // one column with tasks fits the board even in a narrow pane: v shows the list
+  expect(await ui.find({ key: 'group-done' })).toBeUndefined()
+  await ui.press({ key: 'view' })
+  expect(await ui.find({ key: 'open-T-WEB-0005-step-5' })).toBeUndefined()
+  await ui.press({ key: 'group-done' })
   expect(await ui.find({ key: 'open-T-WEB-0005-step-5' })).toBeDefined()
   expect(await ui.find({ key: 'open-T-WEB-0003-step-3' })).toBeDefined()
   expect(await ui.find({ key: 'open-T-WEB-0002-step-2' })).toBeUndefined()
-  await ui.press({ key: 'more' })
+  await ui.press({ key: 'more-done' })
   expect(await ui.find({ key: 'open-T-WEB-0001-step-1' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('a wide pane shows the columns side by side, and v swaps to the list', async ($, on) => {
+  const tasks = [...TASKS, { task: '[[T-WEB-0003-cart]]', progress: 'done', priority: 'low', phase: '',
+    assignee: '', title: 'Cart' }]
+  engine(on, { tasks })
+  await start($)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: { ...PANE.props, bodyColumns: 140 } })
+  // the board: every column at once, the done ones too, and no group to open; an empty one is its heading
+  expect(await ui.find({ key: 'open-T-WEB-0003-cart' })).toBeDefined()
+  expect(await ui.find({ key: 'group-done' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: / Blocked 0 / })).toBeDefined()
+  await ui.press({ key: 'view' })
+  expect(await ui.find({ key: 'group-done' })).toBeDefined()
+  expect(await ui.find({ key: 'open-T-WEB-0003-cart' })).toBeUndefined()
+  await ui.press({ key: 'view' })
+  expect(await ui.find({ key: 'open-T-WEB-0003-cart' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('the state an earlier pane left in the session still draws', async ($, on) => {
+  // the view as the one-column-at-a-time pane kept it, without the fields of the views
+  on('state.get', { plugin: 'projectwright-board', key: 'view' },
+    () => ({ value: { value: { column: 'todo', expanded: [] }, version: 1 } }))
+  engine(on)
+  await start($)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ key: 'open-T-WEB-0001-checkout-page' })).toBeDefined()
+  expect(await ui.find({ key: 'view' })).toBeDefined()
   await ui.unmount()
 })
 
@@ -217,7 +469,7 @@ test('the inject button hands the task to Claude, on open and closed tasks alike
 
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   await ui.press({ key: 'inject-T-WEB-0001-checkout-page' })
-  await ui.press({ key: 'column-done' })
+  await ui.press({ key: 'group-done' })
   await ui.press({ key: 'inject-T-WEB-0003-cart' })
   expect(sent.length).toBe(2)
   expect(sent[0]).toContain('Bring task T-WEB-0001 (T-WEB-0001-checkout-page) into context.')
@@ -242,9 +494,9 @@ test('pressing a task opens its detail in place of the list, and Back returns', 
   // its properties, named and drawn as the model says
   expect(await ui.find({ type: 'Text', text: /^Status$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^ In progress $/ })).toBeDefined()
-  expect(await ui.find({ key: 'column-todo' })).toBeUndefined()
+  expect(await ui.find({ key: 'group-todo' })).toBeUndefined()
   await ui.press({ key: 'back' })
-  expect(await ui.find({ key: 'column-todo' })).toBeDefined()
+  expect(await ui.find({ key: 'group-todo' })).toBeDefined()
   expect(written.length).toBe(0)
   await ui.unmount()
 })
@@ -292,11 +544,12 @@ test('a write of Claude in the wiki refreshes the pane, a write in the code does
   on('tool.call', () => ({ result: {} }))
   await start($)
 
+  // a refresh reads the tasks, the proposals and the reminders
   const before = ran.length
   await $.tool.call({ tool: 'Write', file_path: '/project/wiki/tasks/T-WEB-0009-new.md', content: 'x' })
-  expect(ran.length).toBe(before + 1)
+  expect(ran.length).toBe(before + 3)
   await $.tool.call({ tool: 'Write', file_path: '/project/repositories/web/app.ts', content: 'x' })
-  expect(ran.length).toBe(before + 1)
+  expect(ran.length).toBe(before + 3)
 })
 
 test('a request Claude did not carry out is flagged when its turn ends, and can be dismissed', async ($, on) => {
@@ -332,12 +585,14 @@ test('while the pane is shown it looks at the wiki every 30 seconds, for changes
   await start($)
 
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-  await ui.press({ key: 'column-done' })
-  expect(await ui.find({ key: 'open-T-WEB-0001-checkout-page' })).toBeUndefined()
+  await ui.press({ key: 'group-done' })
+  expect(await ui.find({ key: 'open-T-WEB-0001-checkout-page' })).toBeDefined()
+  expect((await ui.find({ key: 'group-done' }))?.text).toContain('Done 0')
   // someone closes a task in an editor
   tasks = TASKS.map(t => (t.task === '[[T-WEB-0001-checkout-page]]' ? { ...t, progress: 'done' } : t))
   await clock.advance(30_000)
-  expect(await ui.find({ key: 'open-T-WEB-0001-checkout-page' })).toBeDefined()
+  expect((await ui.find({ key: 'group-done' }))?.text).toContain('Done 1')
+  expect((await ui.find({ key: 'group-in-progress' }))?.text).toContain('In progress 0')
   await ui.unmount()
 })
 

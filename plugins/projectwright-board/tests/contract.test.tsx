@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { DETAILS, MODEL, TASKS } from './contract/contract'
+import { DETAILS, MODEL, PROPOSALS, REMINDERS, TASKS } from './contract/contract'
 
 // The board on the real output of the projectwright scripts and on the real
 // board model (contract/contract.ts, written by contract/make_contract.py). When
@@ -38,6 +38,12 @@ const engine = (on: any) => {
   }))
   on('process.run', (_: unknown, e: any) => {
     const argv = [...e.argv] as string[]
+    if (String(argv[1]).endsWith('/proposals.py')) {
+      return { value: { exitCode: 0, stdout: argv[2] === 'list' ? JSON.stringify(PROPOSALS) : '', stderr: '' } }
+    }
+    if (String(argv[1]).endsWith('/reminders.py')) {
+      return { value: { exitCode: 0, stdout: argv[2] === 'list' ? JSON.stringify(REMINDERS) : '', stderr: '' } }
+    }
     const detail = argv[2] === 'task' ? DETAILS[argv[3] ?? ''] : undefined
     if (argv[2] === 'task' && !detail) {
       return { value: { exitCode: 1, stdout: '', stderr: `ERROR: task not found: ${argv[3]}` } }
@@ -85,11 +91,64 @@ test('the detail output has the fields the board reads', () => {
   }
 })
 
-// The pane shows one column at a time: a task is drawn once its column is chosen.
+// In the list, the history columns start closed: a task there is drawn once its group is opened.
 const showColumnOf = async (ui: any, name: string) => {
+  if (await ui.find({ key: `open-${name}` })) return
   const t = TASKS.find(x => x.task === `[[${name}]]`)
-  await ui.press({ key: `column-${String(t?.progress)}` })
+  await ui.press({ key: `group-${String(t?.progress)}` })
 }
+
+test('the proposals output has the fields the board reads', () => {
+  expect(PROPOSALS.length).toBeGreaterThan(0)
+  for (const p of PROPOSALS) {
+    for (const field of ['id', 'kind', 'summary', 'status']) expect(typeof p[field]).toBe('string')
+    expect(['open', 'revising']).toContain(String(p.status))
+    if (p.kind !== 'create' && p.kind !== 'remind') expect(typeof p.task).toBe('string')
+  }
+  expect(PROPOSALS.find(p => p.status === 'revising')?.comment).toBe('Not blocked: later')
+})
+
+test('every proposal of the sample project is drawn, with its answers', async ($, on) => {
+  engine(on)
+  await $.session.start({ cwd: '/project', surface: 'terminal', isInteractive: true })
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: new RegExp(`Proposed by Claude ${PROPOSALS.length}`) })).toBeDefined()
+  for (const p of PROPOSALS) {
+    expect(await ui.find({ type: 'Text', text: String(p.summary) })).toBeDefined()
+    if (p.status === 'revising') {
+      expect(await ui.find({ type: 'Text', text: /Claude is revising it on your comment/ })).toBeDefined()
+    } else {
+      expect(await ui.find({ key: `accept-${String(p.id)}` })).toBeDefined()
+      expect(await ui.find({ key: `reject-${String(p.id)}` })).toBeDefined()
+    }
+  }
+  // a split lists its tasks, a close its consolidation
+  expect(await ui.find({ type: 'Text', text: /· Card payments/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^Consolidation: / })).toBeDefined()
+  await ui.unmount()
+})
+
+test('the reminders output has the fields the board reads', () => {
+  expect(REMINDERS.length).toBeGreaterThan(0)
+  for (const r of REMINDERS) {
+    for (const field of ['id', 'text']) expect(typeof r[field]).toBe('string')
+    if (r.due !== undefined) expect(String(r.due)).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+  }
+  expect(REMINDERS.some(r => typeof r.done_on === 'string')).toBe(true)
+})
+
+test('every reminder of the sample project is drawn, with its tick', async ($, on) => {
+  engine(on)
+  await $.session.start({ cwd: '/project', surface: 'terminal', isInteractive: true })
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  for (const r of REMINDERS) {
+    expect(await ui.find({ type: 'Text', text: String(r.text) })).toBeDefined()
+    expect(await ui.find({ key: `tick-${String(r.id)}` })).toBeDefined()
+  }
+  await ui.unmount()
+})
 
 test('every task of the sample project is drawn, in a column of the model', async ($, on) => {
   engine(on)
@@ -97,7 +156,7 @@ test('every task of the sample project is drawn, in a column of the model', asyn
 
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   for (const c of MODEL.columns as { progress: string; label: string }[]) {
-    expect(await ui.find({ key: `column-${c.progress}` })).toBeDefined()
+    expect(await ui.find({ key: `group-${c.progress}` })).toBeDefined()
   }
   for (const name of names) {
     const t = TASKS.find(x => x.task === `[[${name}]]`)

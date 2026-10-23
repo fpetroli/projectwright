@@ -82,6 +82,26 @@ TASKS = [
 ]
 
 
+# Reminders of the sample project: dated and undated; the third is ticked.
+REMINDERS = [("Send the release notes to the reviewers", "2026-01-23"), ("Renew the payment provider key", None),
+             ("Book the demo", "2026-01-21")]
+
+# Proposals of Claude on the sample project: one of each shape the board draws.
+PROPOSALS = [
+    dict(kind="create", summary="Address book", why="The checkout asks for an address every time.",
+         items=[dict(title="Address book", priority="medium")]),
+    dict(kind="move", task="T-WEB-0003-order-history", summary="Blocked -> To do", why="The payment step is done.",
+         changes=dict(progress="todo")),
+    dict(kind="split", task="T-WEB-0002-payment-step", summary="Split the payment step in two",
+         why="Cards and bank transfers go to different providers.",
+         items=[dict(title="Card payments"), dict(title="Bank transfers")]),
+    dict(kind="close", task="T-WEB-0001-checkout-page", summary="In progress -> Done",
+         why="Its criteria are met.", consolidation="How the checkout works moves to the note of the web component."),
+    dict(kind="remind", summary="Ask the provider for test cards", why="The payment step needs them.",
+         items=[dict(title="Ask the provider for test cards", due="2026-01-26")]),
+]
+
+
 def run(args, cwd):
     done = subprocess.run([sys.executable, *map(str, args)], cwd=cwd, capture_output=True, text=True,
                           encoding="utf-8")
@@ -108,14 +128,33 @@ def build():
         tasks = json.loads(run([SCRIPTS / "wiki-query.py", "tasks", "--format", "json", "--root", root], root))
         details = {t["name"]: json.loads(run([SCRIPTS / "wiki-query.py", "task", t["name"], "--format", "json",
                                               "--root", root], root)) for t in TASKS}
+        for proposal in PROPOSALS:
+            run([SCRIPTS / "proposals.py", "add", "--json", json.dumps(proposal), "--root", root], root)
+        run([SCRIPTS / "proposals.py", "set", "P-0002", "--status", "revising", "--comment", "Not blocked: later",
+             "--root", root], root)
+        proposals = json.loads(run([SCRIPTS / "proposals.py", "list", "--status", "open,revising", "--format", "json",
+                                    "--root", root], root))
+        for p in proposals:  # the times change at every run: the contract keeps their shape
+            p["created"] = p["updated"] = "2026-01-20T10:00:00"
+        for text, due in REMINDERS:
+            run([SCRIPTS / "reminders.py", "add", text, *(["--due", due] if due else []), "--root", root], root)
+        run([SCRIPTS / "reminders.py", "done", "R-0003", "--root", root], root)
+        reminders = json.loads(run([SCRIPTS / "reminders.py", "list", "--format", "json", "--root", root], root))
+        for r in reminders:  # the days change at every run too
+            r["created"] = "2026-01-20"
+            if "done_on" in r:
+                r["done_on"] = "2026-01-20"
     model = json.loads(MODEL.read_text(encoding="utf-8"))
     return ("// The real output of the projectwright scripts on a sample project, and the board model.\n"
             "// Written by make_contract.py: do not edit; run it again after changing the scripts.\n\n"
             "export const TASKS: Record<string, unknown>[] = %s\n\n"
             "export const DETAILS: Record<string, Record<string, unknown>> = %s\n\n"
-            "export const MODEL: Record<string, unknown> = %s\n"
+            "export const MODEL: Record<string, unknown> = %s\n\n"
+            "export const PROPOSALS: Record<string, unknown>[] = %s\n\n"
+            "export const REMINDERS: Record<string, unknown>[] = %s\n"
             % (json.dumps(tasks, ensure_ascii=False, indent=2), json.dumps(details, ensure_ascii=False, indent=2),
-               json.dumps(model, ensure_ascii=False, indent=2)))
+               json.dumps(model, ensure_ascii=False, indent=2), json.dumps(proposals, ensure_ascii=False, indent=2),
+               json.dumps(reminders, ensure_ascii=False, indent=2)))
 
 
 def main():

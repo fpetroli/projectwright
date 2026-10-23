@@ -20,7 +20,7 @@ What to record comes from `$ARGUMENTS` or from the **current working session**: 
 
 ## 2. Rule of application
 
-- **What derives from the session is applied directly**, without asking for confirmation item by item: the user was present when it was decided.
+- **What derives from the session is applied directly**, without asking for confirmation item by item: the user was present when it was decided. **Tasks are the exception** (constitution, principle 13): they are proposed, not applied (§3.5).
 - **Stop and ask the user** only in front of:
   - an **inconsistency**: the novelty contradicts an existing note, an ADR or a claim of a card in `wiki-sources/`;
   - an **ambiguity**: from the session it is not clear whether something was *decided* or only *supposed*;
@@ -31,10 +31,10 @@ What to record comes from `$ARGUMENTS` or from the **current working session**: 
 Go through the session and classify the novelties:
 
 1. **Decisions taken** → one ADR each (§4);
-2. **New or corrected knowledge** → thematic notes, following the placement rule of the constitution. Existing note → update it; new knowledge → new file (in components: the component folder, a feature note prefixed with the component name);
+2. **New or corrected knowledge** → thematic notes — except what the work of an **open task** found and that is not yet settled: that goes to the task's **Log** (constitution, principle 14; §3.5), and reaches the notes when the task closes. The notes follow the placement rule of the constitution: existing note → update it; new knowledge → new file (in components: the component folder, a feature note prefixed with the component name);
 3. **Questions**: those **closed** by the session are closed in their file (`lifecycle: closed`, `closed_on`, `closure_reason`, `decision`, `status: decided`); those **opened** by the session become new question files with a safe ID (template `templates/records/question.md` of the plugin), with `gate`, `assumption`, `precaution` and `decision_owner` where they apply;
 4. **Epistemic statuses**: update the `status` of the notes touched (for example from `undecided` or `conflicting` to `decided`);
-5. **Tasks**, when `tasks.mode` is `wiki`: update `progress` and `commits` of the tasks worked on, create the tasks agreed in the session (template `templates/records/task.md`), close the finished ones (`progress: done`, `closed_on`);
+5. **Tasks**, when `tasks.mode` is `wiki` — **proposed, not applied**: the board is the user's. Write only what the user already asked for in the session (a task they asked to create, move or close, in chat or from a board), the `commits` of the tasks worked on and, for an open task worked on, one dated line in its **Log** with what the session found and where it stands. Everything else becomes a list of **tasks to confirm**, one line each: a task to create (title, why, priority, where), a task to move (from → to: started, blocked and by what, finished), to close, cancel, re-assign or re-prioritise. A task to close carries its **consolidation**: what of its log moves to which note, and the outcome that replaces the log. Before proposing, read the proposals already there — `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/proposals.py" list --status all --format json` — and never propose again what is open or what the user rejected, unless the session changed the reason. Write each proposal with `proposals.py add --json '<proposal>'` (fields in the script's help: `kind`, `task`, `summary`, `why`, `items`, `changes`, `consolidation`), so that the board beside the chat shows it too. **Reminders** are proposed the same way (`kind: remind`): something the session left for the user to do that is neither a task nor something you can do — send an e-mail, update an official document, run the git commands of a release — with its date when the session gave one; never one that repeats an open reminder (`reminders.py list`). Show the list in the summary (§9), **numbered 1, 2, 3 and without the proposal ids** (they are for the tools), and ask for the yes — on all of it or on single lines; when the user answers in chat, mark each proposal `accepted` or `rejected` (`proposals.py set <id> --status …`); write what is confirmed (template `templates/records/task.md`; `closed_on` when a task closes; the notes and the **Outcome** when it is consolidated) and leave out the rest;
 6. **Dashboard**: update the hand-written parts touched (synthesis of `project-status`, glossary, reading paths) — they stay **derived**: every fact in them must have its home elsewhere.
 
 ## 4. The ADRs
@@ -88,7 +88,8 @@ and remove one that the session contradicted (`profile.py remove "<text>"`). Not
 
 1. The lint runs by itself after every write: if it reports violations introduced by you, fix them.
 2. Summary for the user:
-   - ADRs created or updated, notes created or updated, questions opened and closed, tasks updated;
+   - ADRs created or updated, notes created or updated, questions opened and closed, tasks changed on the user's request;
+   - the **tasks to confirm** (§3.5), as a short list the user answers with yes, no or a correction;
    - inconsistencies submitted to the user and how they were resolved;
    - ⚠️ **official documents to update** (explicit reminder — the wiki cannot correct them);
    - deviations from the framework recorded, with the upstream signal;
