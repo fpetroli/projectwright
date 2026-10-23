@@ -16,7 +16,8 @@ Common options:
     --level project|component    only cross-cutting records, or only component records
     --area <code>                only records with that area code
     --status <status>            only records with that epistemic status
-    --format table|json|md       output format (default: table)
+    --format table|json|md       output format (default: table); dashboard in JSON is one object
+                                 with its sections
     --hook                       for the SessionStart hook: never fails, prints nothing
                                  outside a projectwright project
 
@@ -108,18 +109,24 @@ def link(r):
     return "[[%s]]" % r["_name"]
 
 
+def cell(r, getter):
+    v = getter(r) if callable(getter) else r.get(getter)
+    if v is None:
+        return ""
+    if isinstance(v, list):
+        return ", ".join(map(str, v))
+    return str(v)
+
+
+def plain_rows(rows, columns):
+    """The rows as the JSON of every command prints them: one object per row, strings only."""
+    return [{h: cell(r, g) for h, g in columns} for r in rows]
+
+
 def render(rows, columns, fmt, title=None):
     """rows: list of dicts; columns: list of (header, key or function)."""
-    def cell(r, getter):
-        v = getter(r) if callable(getter) else r.get(getter)
-        if v is None:
-            return ""
-        if isinstance(v, list):
-            return ", ".join(map(str, v))
-        return str(v)
-
     if fmt == "json":
-        return json.dumps([{h: cell(r, g) for h, g in columns} for r in rows], ensure_ascii=False, indent=2)
+        return json.dumps(plain_rows(rows, columns), ensure_ascii=False, indent=2)
     lines = []
     if fmt == "md":
         if title:
@@ -253,17 +260,12 @@ def cmd_deviations(root, project, args):
     return "\n\n".join(out)
 
 
-def cmd_dashboard(root, project, args):
-    fmt = "md" if args.format == "md" else "table"
+C_COLS = [("component", link), ("code", "code"), ("status", "component_status")]
+
+
+def dashboard_sections(root, project):
+    """What the dashboard shows, as records: one place for the text and for the JSON."""
     recs = records(root, project)
-    name = pwlib.get(project, "project.name") or Path(root).name
-    out = []
-    if fmt == "md":
-        out.append("## projectwright dashboard — %s\n" % name)
-        out.append("Computed from the wiki now (framework %s). Rules: `wiki/README.md`; "
-                   "reasoned status: `wiki/dashboard/project-status.md`.\n" % (pwlib.get(project, "framework.version") or "?"))
-    else:
-        out.append("projectwright dashboard — %s" % name)
 
     class A:  # filters for select()
         component = None
@@ -275,55 +277,85 @@ def cmd_dashboard(root, project, args):
     open_q = select(recs, project, "question", A)
     blocking = sorted((r for r in open_q if r.get("gate") in ("red", "orange")),
                       key=lambda r: (GATE_RANK.get(r.get("gate"), 9), r["_name"]))
-    out.append(render(blocking, Q_COLS, fmt, "Open questions 🔴/🟠 — the pre-code gate"))
-    others = len(open_q) - len(blocking)
-    if others:
-        out.append(("%d more open question(s) 🟡: `wiki-query.py questions --lifecycle open`\n" if fmt == "md"
-                    else "%d more open question(s) (yellow)") % others)
-
     decisions = [r for r in recs if r.get("type") == "decision" and r.get("status") != "superseded"]
     decisions.sort(key=lambda r: (str(r.get("updated") or ""), str(r.get("created") or ""), r["_name"]), reverse=True)
-    out.append(render(decisions[:RECENT_DECISIONS], D_COLS, fmt, "Recent decisions"))
-
-    comps = []
     notes = {r["_name"]: r for r in recs if r.get("type") == "component"}
-    for c in pwlib.get(project, "components") or []:
-        if isinstance(c, dict):
-            n = notes.get(c.get("name"), {})
-            comps.append({"_name": c.get("name"), "code": c.get("code"),
-                          "component_status": n.get("component_status", "(entry note missing)")})
-    out.append(render(comps, [("component", link), ("code", "code"), ("status", "component_status")],
-                      fmt, "Components"))
-
+    comps = [{"_name": c.get("name"), "code": c.get("code"),
+              "component_status": notes.get(c.get("name"), {}).get("component_status", "(entry note missing)")}
+             for c in pwlib.get(project, "components") or [] if isinstance(c, dict)]
+    tasks = None
     if pwlib.get(project, "tasks.mode") == "wiki":
-        tasks = [r for r in recs if r.get("type") == "task" and r.get("progress") in ("in-progress", "blocked")]
-        out.append(render(sorted(tasks, key=lambda r: r["_name"]), T_COLS, fmt, "Tasks in progress or blocked"))
-
-    pending = [r for r in read_log(root) if r.get("integrated") == "no"]
-    out.append(render(pending, S_COLS, fmt, "Cards not yet integrated"))
-
+        tasks = sorted((r for r in recs if r.get("type") == "task" and r.get("progress") in ("in-progress", "blocked")),
+                       key=lambda r: r["_name"])
     try:
         files, adrs, uncovered = deviations(root, project)
+        devs = {"files": len(files), "without_adr": len(uncovered),
+                "not_proposed": len([r for r in adrs if not r.get("upstream")])} if files else None
     except Exception:
-        files, adrs, uncovered = None, [], []
-    if files:
-        to_propose = [r for r in adrs if not r.get("upstream")]
-        msg = "Framework files changed in this project: %d (%d without an ADR); deviations not yet proposed: %d" % (
-            len(files), len(uncovered), len(to_propose))
-        out.append(("**%s** — `wiki-query.py deviations`, `/projectwright:propose-improvement`.\n" if fmt == "md"
-                    else "%s — wiki-query.py deviations") % msg)
-
+        devs = None
     try:
         import importlib.util
         spec = importlib.util.spec_from_file_location("wiki_lint", pwlib.SCRIPTS_DIR / "wiki-lint.py")
         lint_mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(lint_mod)
-        n = len(lint_mod.lint(root, project, pwlib.load_schema()))
+        lint = len(lint_mod.lint(root, project, pwlib.load_schema()))
     except Exception:
-        n = None
-    if n:
+        lint = None
+    return {"name": pwlib.get(project, "project.name") or Path(root).name,
+            "blocking": blocking, "others": len(open_q) - len(blocking),
+            "decisions": decisions[:RECENT_DECISIONS], "components": comps, "tasks": tasks,
+            "pending": [r for r in read_log(root) if r.get("integrated") == "no"],
+            "deviations": devs, "lint": lint}
+
+
+def dashboard_data(root, project):
+    """The dashboard as data: the same sections the text shows, with the fields of the JSON
+    of the commands they come from (questions, decisions, tasks, sources)."""
+    d = dashboard_sections(root, project)
+    return {
+        "project": d["name"],
+        "framework_version": pwlib.get(project, "framework.version"),
+        "blocking_questions": plain_rows(d["blocking"], Q_COLS),
+        "other_open_questions": d["others"],
+        "recent_decisions": plain_rows(d["decisions"], D_COLS),
+        "components": plain_rows(d["components"], C_COLS),
+        "tasks_in_progress_or_blocked": None if d["tasks"] is None else plain_rows(d["tasks"], T_JSON_COLS),
+        "pending_cards": plain_rows(d["pending"], S_COLS),
+        "deviations": d["deviations"],
+        "lint_violations": d["lint"],
+    }
+
+
+def cmd_dashboard(root, project, args):
+    if args.format == "json":
+        return json.dumps(dashboard_data(root, project), ensure_ascii=False, indent=2)
+    fmt = "md" if args.format == "md" else "table"
+    d = dashboard_sections(root, project)
+    out = []
+    if fmt == "md":
+        out.append("## projectwright dashboard — %s\n" % d["name"])
+        out.append("Computed from the wiki now (framework %s). Rules: `wiki/README.md`; "
+                   "reasoned status: `wiki/dashboard/project-status.md`.\n" % (pwlib.get(project, "framework.version") or "?"))
+    else:
+        out.append("projectwright dashboard — %s" % d["name"])
+    out.append(render(d["blocking"], Q_COLS, fmt, "Open questions 🔴/🟠 — the pre-code gate"))
+    if d["others"]:
+        out.append(("%d more open question(s) 🟡: `wiki-query.py questions --lifecycle open`\n" if fmt == "md"
+                    else "%d more open question(s) (yellow)") % d["others"])
+    out.append(render(d["decisions"], D_COLS, fmt, "Recent decisions"))
+    out.append(render(d["components"], C_COLS, fmt, "Components"))
+    if d["tasks"] is not None:
+        out.append(render(d["tasks"], T_COLS, fmt, "Tasks in progress or blocked"))
+    out.append(render(d["pending"], S_COLS, fmt, "Cards not yet integrated"))
+    devs = d["deviations"]
+    if devs:
+        msg = "Framework files changed in this project: %d (%d without an ADR); deviations not yet proposed: %d" % (
+            devs["files"], devs["without_adr"], devs["not_proposed"])
+        out.append(("**%s** — `wiki-query.py deviations`, `/projectwright:propose-improvement`.\n" if fmt == "md"
+                    else "%s — wiki-query.py deviations") % msg)
+    if d["lint"]:
         out.append(("**Wiki lint: %d violation(s)** — run `wiki-lint.py` and fix them.\n" if fmt == "md"
-                    else "Wiki lint: %d violation(s) — run wiki-lint.py") % n)
+                    else "Wiki lint: %d violation(s) — run wiki-lint.py") % d["lint"])
     sep = "\n" if fmt == "md" else "\n\n"
     return sep.join(out)
 

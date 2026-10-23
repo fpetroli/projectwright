@@ -18,6 +18,8 @@ or, at the prompt of a session, `/plugin install projectwright-board@projectwrig
 
 Installing the board does not install `projectwright`: install it first, or keep the copy the project has in `.claude/skills/projectwright/`. This is on purpose: a project that copies projectwright to adapt it must keep running its own copy, and an installed `projectwright` would take its place.
 
+A project that copies projectwright can copy the board too, into `.claude/skills/projectwright-board/`: Claude Code loads it from there, and `/projectwright:upgrade` replaces it with the board of the new version. The copy is not meant to be changed: to adapt the board, change it in this repository.
+
 Requirements: a version of Claude Code with hooks modules (mods); Python ≥ 3.11, as for `projectwright` (`python3`, or `python` where only that name exists).
 
 ## Use
@@ -32,7 +34,9 @@ The pane opens by itself beside the chat when the terminal is wide enough; other
 
 **Every change goes through Claude.** The board never writes the wiki: what you do in it becomes a request to Claude, sent as yours and visible in the conversation, which Claude applies with `/projectwright:manage-tasks`, its rules and the lint. Viewing (the list, the detail) changes nothing and asks nothing.
 
-The board refreshes at the start of the session, after every write of Claude in `wiki/` or `project.yaml`, and with `/board`. A change made by hand outside Claude shows at the next refresh.
+The board refreshes at the start of the session, after every write of Claude in `wiki/` or `project.yaml`, at the end of every turn of Claude, and with `/board`. While the pane is shown it also looks at the wiki every 30 seconds, so a change made by hand, in an editor, shows within half a minute.
+
+A request sent from the board shows in the pane until its task is in the wiki. When a turn of Claude ends without it — Claude may be asking you something, or may have stopped — the line says so; **✕** dismisses it.
 
 ## Limits
 

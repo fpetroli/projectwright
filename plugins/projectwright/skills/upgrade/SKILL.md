@@ -23,7 +23,7 @@ The first gives the running plugin and its version; the lock gives the project's
 **Plugin installed** (`plugin: installed`):
 
 - If the running plugin is already newer than the project (the start-of-session check said so), the new version is the running plugin: go to §3 without `--from`.
-- Otherwise, update it — with the user's yes — and restart: `claude plugin marketplace update projectwright`, then `claude plugin update projectwright@projectwright --scope project`. Tell the user to **restart Claude Code** and run `/projectwright:upgrade` again: the skills and hooks of the new version must be the ones running. Stop here.
+- Otherwise, update it — with the user's yes — and restart: `claude plugin marketplace update projectwright`, then `claude plugin update projectwright@projectwright --scope project` — and, when the project also has the optional board installed (`projectwright-board@projectwright` in `claude plugin list`), `claude plugin update projectwright-board@projectwright --scope project` too: the two plugins are released together, with the same version. Tell the user to **restart Claude Code** and run `/projectwright:upgrade` again: the skills and hooks of the new version must be the ones running. Stop here.
 
 **Plugin copied into the project** (`plugin: in-project`): the new version is a folder with the new plugin, given with `--from`:
 
@@ -45,6 +45,7 @@ A version lower than or equal to the project's is not an upgrade: say so and sto
    ```
    For every framework file: `REPLACE` (not changed in the project: takes the new version), `ADD` / `REMOVE` (new or removed in the new version), `KEEP` (changed by the project, untouched by the new version: the project's version stays), `MERGE` (changed by both in different places: merged automatically), `CONFLICT` (changed by both in the same places, or a case that needs a choice).
 3. Show the user the plan in short — how many files per action, and every `MERGE` and `CONFLICT` by name with its reason — and ask whether to proceed.
+4. **The board**, when the project copies it in `.claude/skills/projectwright-board/`: the plan ends with a `Board:` line. `REPLACE` means the copy is replaced with the board released beside the new version (`<new>/../projectwright-board`): the copy is not a framework file and holds no changes of the project, so nothing is merged. `KEEP` means the new version has no board beside it (for example a folder holding only `projectwright`): say that the board stays at its version, and that it works only with a `projectwright` of the same version.
 
 ## 4. Apply
 

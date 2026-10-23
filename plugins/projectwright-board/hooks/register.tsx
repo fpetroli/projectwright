@@ -3,6 +3,8 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { Applying, Board, Draft, Edit, Fields, Pending, Selected, Task, TaskDetail } from '../types'
 
+import { touchesWiki } from './paths'
+
 // The pane reads the tasks from the projectwright scripts: the logic stays in
 // Python, the mod only draws what wiki-query.py answers.
 const PANE = 'projectwright-board'
@@ -114,9 +116,13 @@ const load = async ($: EngineInterface): Promise<Board> => {
 
 const name = (t: Task) => t.task.replace(/^\[\[|\]\]$/g, '')
 
+// What a refresh compares: the tasks or the error, not the time it was read.
+const sameBoard = (a: Board, b: Board) => a.error === b.error && JSON.stringify(a.tasks) === JSON.stringify(b.tasks)
+
 const refresh = async ($: EngineInterface) => {
   const next = await load($)
-  await update($, board, () => next)
+  // Unchanged, the pane keeps what it draws: a periodic check redraws nothing.
+  if (!sameBoard(await read($, board), next)) await update($, board, () => next)
   // A request is done once a task it did not know about is in the wiki.
   const names = next.tasks.map(name)
   await update($, pending, list => (list ?? []).filter(p => names.every(n => p.known.includes(n))))
@@ -142,7 +148,8 @@ const loadDetail = async ($: EngineInterface, task: string): Promise<Selected> =
 
 const openTask = async ($: EngineInterface, task: string) => {
   const shown = await loadDetail($, task)
-  await update($, selected, () => shown)
+  const before = await read($, selected)
+  if (JSON.stringify(before) !== JSON.stringify(shown)) await update($, selected, () => shown)
   // Changes sent to Claude are applied once the task reads differently.
   const sent = await read($, applying)
   if (sent.name === task && shown.data && JSON.stringify(shown.data) !== sent.before) {
@@ -178,7 +185,7 @@ const applyEdit = async ($: EngineInterface, form: Edit) => {
   }
   const { id } = split({ task: `[[${form.name}]]`, progress: '', priority: '', phase: '', assignee: '' })
   const lines = changed.map(f => `- ${f}: "${form.original?.[f]}" → "${form.values?.[f].trim()}"`)
-  await update($, applying, () => ({ name: form.name, sentAt: now(), before: JSON.stringify(shown.data) }))
+  await update($, applying, () => ({ name: form.name, sentAt: now(), sentMs: Date.now(), before: JSON.stringify(shown.data) }))
   await update($, edit, () => NO_EDIT)
   await askClaude($, `Update task ${id} (${form.name}) with /projectwright:manage-tasks.` +
     (lines.length > 0 ? `\nChange these fields:\n${lines.join('\n')}` : '') +
@@ -219,7 +226,7 @@ const createTask = async ($: EngineInterface, form: Draft) => {
   }
   const notes = form.notes.trim()
   const known = (await read($, board)).tasks.map(name)
-  await update($, pending, list => [...(list ?? []), { title, sentAt: now(), known }])
+  await update($, pending, list => [...(list ?? []), { title, sentAt: now(), sentMs: Date.now(), known }])
   await update($, draft, () => EMPTY)
   await askClaude($, `Create a task in the wiki with /projectwright:manage-tasks: "${title}". ` +
     `Priority: ${form.priority}. ` +
@@ -242,10 +249,23 @@ const injectTask = async ($: EngineInterface, t: Task) => {
   $.ui.toast(`board: ${id} sent to Claude`)
 }
 
-// A write that changes what the pane shows: a task note or the project settings.
-const touchesWiki = (path: string, root: string) => {
-  const rel = path.startsWith(root + '/') ? path.slice(root.length + 1) : path
-  return rel.startsWith('wiki/') || rel === 'project.yaml'
+// How often the pane looks at the wiki by itself, for the changes made outside
+// Claude (by hand, in an editor): the scripts run only when the pane is shown.
+const POLL_MS = 30_000
+
+const poll = async ($: EngineInterface) => {
+  const panes = await $.ui.panes()
+  if (panes.some(p => p.id === PANE && p.isShown)) await refresh($)
+}
+
+// A turn of Claude has ended: the requests the pane sent before it began and
+// that are still not in the wiki get flagged, since Claude may be waiting for
+// an answer, or may have stopped. The person can dismiss them.
+let turnStartedMs = 0
+
+const flagStale = async ($: EngineInterface) => {
+  await update($, pending, list => (list ?? []).map(p => (p.sentMs <= turnStartedMs ? { ...p, isStale: true } : p)))
+  await update($, applying, a => (a?.name && (a.sentMs ?? 0) <= turnStartedMs ? { ...a, isStale: true } : a ?? {}))
 }
 
 export const register: Register = on => {
@@ -258,9 +278,28 @@ export const register: Register = on => {
     const started = await next(e)
     await refresh($)
     void $.ui.open({ id: PANE, title: 'Board' })
+    try {
+      $.clock.every(POLL_MS, () => void poll($).catch(() => undefined))
+    } catch {
+      // no timers here (a host without them): the pane still refreshes on writes and on /board
+    }
 
     return started
   })
+
+  on('turn.start', async ($, e, next) => {
+    if (e.agentId === undefined) turnStartedMs = Date.now()
+    return next(e)
+  })
+
+  on('turn.complete', async ($, e, next) => {
+    const done = await next(e)
+    if (e.agentId === undefined) {
+      await refresh($)
+      await flagStale($)
+    }
+    return done
+  }).catch(($, e, next) => next(e)) // the answer is never held up by the pane
 
   on('command.run', { command: 'board' }, async $ => {
     await refresh($)
@@ -338,11 +377,22 @@ export const register: Register = on => {
       </Box>
     )
 
-    // Requests on their way: shown until the task is in the wiki.
+    // Requests on their way: shown until the task is in the wiki, flagged when
+    // a turn of Claude ended without it, dismissed with ✕.
     const waiting = sent.length > 0 && (
       <Box flexDirection="column" marginBottom={1}>
-        {sent.map(p => (
-          <Text color="claude" wrap="truncate-end">◌ Claude is adding “{p.title}” · {p.sentAt}</Text>
+        {sent.map((p, i) => (
+          <Box key={`pending-${p.sentMs}-${i}`} flexDirection="row" justifyContent="space-between" gap={1}>
+            <Box flexShrink={1}>
+              {p.isStale
+                ? <Text color="warning" wrap="truncate-end">◌ “{p.title}” is not in the wiki yet: Claude may be waiting for you · {p.sentAt}</Text>
+                : <Text color="claude" wrap="truncate-end">◌ Claude is adding “{p.title}” · {p.sentAt}</Text>}
+            </Box>
+            <Button key={`dismiss-pending-${p.sentMs}-${i}`} dimColor
+              onPress={() => void update($, pending, list => (list ?? []).filter(x => x.sentMs !== p.sentMs))}>
+              ✕
+            </Button>
+          </Box>
         ))}
       </Box>
     )
@@ -441,7 +491,14 @@ export const register: Register = on => {
             </Box>
           </Box>
           {sent.name === shown.name && (
-            <Text color="claude" wrap="truncate-end">◌ Claude is applying your changes · {sent.sentAt}</Text>
+            <Box flexDirection="row" justifyContent="space-between" gap={1}>
+              <Box flexShrink={1}>
+                {sent.isStale
+                  ? <Text color="warning" wrap="truncate-end">◌ Your changes are not in the wiki yet: Claude may be waiting for you · {sent.sentAt}</Text>
+                  : <Text color="claude" wrap="truncate-end">◌ Claude is applying your changes · {sent.sentAt}</Text>}
+              </Box>
+              <Button key="dismiss-applying" dimColor onPress={() => void update($, applying, () => ({}))}>✕</Button>
+            </Box>
           )}
           <Text bold color={state?.color ?? 'text'}>
             {state?.mark ?? '·'} {id}  <Text dimColor>{field('progress') || t.progress}</Text>

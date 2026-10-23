@@ -38,7 +38,9 @@ Usage (from the project root, or with --root):
                                          project, merges the changed ones (three-way, git merge-file)
                                          and sets the conflicts aside in .claude/.projectwright-upgrade/
                                          for the user; without conflicts it closes the upgrade (lock),
-                                         otherwise `lock --from` closes it once they are resolved
+                                         otherwise `lock --from` closes it once they are resolved;
+                                         a board copied into the project (.claude/skills/projectwright-board)
+                                         is replaced with the one beside the new version, when there is one
     python3 framework.py resolved <file> ...
                                          marks the conflicts of an upgrade as resolved
     python3 framework.py permissions [--remove]
@@ -68,6 +70,7 @@ ORIGINAL_REL = ".claude/.projectwright-original"  # pristine copy of the framewo
 PLUGIN_REL = pwlib.PLUGIN_IN_PROJECT
 POINTER_REL = ".claude/.projectwright-plugin"     # path of the running plugin, read by the git hook
 STAGE_REL = ".claude/.projectwright-upgrade"       # conflicts of an upgrade, waiting for the user
+BOARD_REL = ".claude/skills/projectwright-board"   # the optional board, when the project copies it
 PLUGIN_ID = "projectwright@projectwright"          # the plugin installed from the projectwright marketplace
 PROJECT_SECTION = "## Project-specific instructions"
 # project file -> template that provides it
@@ -415,6 +418,55 @@ def upgrade_plan(root, new_dir, base_plugin):
     return plan
 
 
+def board_plan(root, new_dir):
+    """The board copied into the project follows the framework: it holds no changes of the
+    project (it is not a framework file and is not in the lock), so an upgrade replaces it
+    with the board released beside the new version (`<new>/../projectwright-board`).
+    Returns (action, detail, source): action "replace", "same", "keep" or None (no copy)."""
+    copy = Path(root) / BOARD_REL
+    if not copy.is_dir():
+        return None, "", None
+    src = Path(new_dir).parent / "projectwright-board"
+    if not (src / ".claude-plugin" / "plugin.json").is_file():
+        return "keep", "the new version has no projectwright-board beside it: the copy stays as it is", None
+
+    def files(base):
+        out = {}
+        for dirpath, dirnames, filenames in os.walk(base):
+            rel_dir = pwlib.rel(base, Path(dirpath))
+            dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS
+                                 and not (rel_dir == ".claude-plugin" and d == "types"))
+            for name in filenames:
+                out[pwlib.rel(base, Path(dirpath) / name)] = (Path(dirpath) / name).read_bytes()
+        return out
+
+    old_v, new_v = pwlib.plugin_version(copy), pwlib.plugin_version(src)
+    if files(copy) == files(src):
+        return "same", "already the board of %s" % new_v, src
+    note = "" if new_v == pwlib.plugin_version(new_dir) else " (its version differs from the framework's)"
+    return "replace", "board %s -> %s%s" % (old_v, new_v, note), src
+
+
+def apply_board(root, src):
+    import shutil
+    copy = Path(root) / BOARD_REL
+    types = copy / ".claude-plugin" / "types"   # written by Claude Code at every load: kept
+    keep = None
+    if types.is_dir():
+        keep = Path(root) / STAGE_REL / "board-types"
+        if keep.exists():
+            shutil.rmtree(keep)
+        keep.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(types), str(keep))
+    shutil.rmtree(copy)
+    shutil.copytree(src, copy, ignore=shutil.ignore_patterns(*SKIP_DIRS))
+    if keep is not None:
+        shutil.move(str(keep), str(types))
+        stage = Path(root) / STAGE_REL
+        if stage.is_dir() and not any(stage.iterdir()):
+            stage.rmdir()
+
+
 def cmd_upgrade(root, new_dir, base_plugin, apply, fmt):
     lock = read_lock(root)
     if lock is None:
@@ -433,9 +485,12 @@ def cmd_upgrade(root, new_dir, base_plugin, apply, fmt):
         print("an upgrade is already in progress: resolve the conflicts in %s first" % STAGE_REL, file=sys.stderr)
         return 2
     plan = upgrade_plan(root, new_dir, base_plugin)
+    board_action, board_detail, board_src = board_plan(root, new_dir)
     if fmt == "json":
         print(json.dumps({"from_version": old, "to_version": new, "source": str(new_dir),
-                          "plan": [{"file": r, "action": a, "detail": d} for r, a, d in plan]}, indent=2))
+                          "plan": [{"file": r, "action": a, "detail": d} for r, a, d in plan],
+                          "board": None if board_action is None else
+                          {"folder": BOARD_REL, "action": board_action, "detail": board_detail}}, indent=2))
     else:
         print("upgrade of the framework files: %s -> %s (from %s)" % (old, new, new_dir))
         for r, a, d in plan:
@@ -447,6 +502,8 @@ def cmd_upgrade(root, new_dir, base_plugin, apply, fmt):
         print("---")
         print("Summary: " + ", ".join("%d %s" % (counts.get(k, 0), k) for k in
                                       ("replace", "add", "remove", "merge", "keep", "conflict", "same")))
+        if board_action is not None:
+            print("Board: %s\t%s\t%s" % (board_action.upper(), BOARD_REL, board_detail))
     if not apply:
         return 0
 
@@ -476,6 +533,9 @@ def cmd_upgrade(root, new_dir, base_plugin, apply, fmt):
             target.write_bytes(res[0] if res else (p if p is not None else b""))
             Path(str(target) + ".new").write_bytes(n if n is not None else b"")
             conflicts.append(rel)
+    if board_action == "replace":
+        apply_board(root, board_src)
+        print("board replaced: %s (%s)" % (BOARD_REL, board_detail))
     print("applied: %d file(s) replaced or added, %d removed, %d merged" % (
         sum(1 for _r, a, _d in plan if a in ("replace", "add")),
         sum(1 for _r, a, _d in plan if a == "remove"),

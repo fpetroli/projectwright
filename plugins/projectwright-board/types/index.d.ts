@@ -14,8 +14,9 @@ export type Board = { tasks: Task[]; error?: string; updated?: string }
 // The new-task form, kept while the person fills it in.
 export type Draft = { isOpen: boolean; title: string; priority: string; notes: string }
 
-// A request sent to Claude and not yet seen in the wiki.
-export type Pending = { title: string; sentAt: string; known: string[] }
+// A request sent to Claude and not yet seen in the wiki: `sentMs` when it
+// left, `isStale` once a turn of Claude ended without it in the wiki.
+export type Pending = { title: string; sentAt: string; sentMs: number; known: string[]; isStale?: boolean }
 
 // One task in full, as `wiki-query.py task <name> --format json` prints it.
 export type TaskDetail = {
@@ -39,7 +40,7 @@ export type Edit = { name?: string; original?: Fields; values?: Fields; bodyChan
 
 // Changes sent to Claude and not yet seen in the wiki: `before` is the task as
 // it was read when they were sent.
-export type Applying = { name?: string; sentAt?: string; before?: string }
+export type Applying = { name?: string; sentAt?: string; sentMs?: number; before?: string; isStale?: boolean }
 
 declare module 'claude-code' {
   interface PluginState {

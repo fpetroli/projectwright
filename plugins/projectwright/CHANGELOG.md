@@ -11,6 +11,8 @@ The plugins of the marketplace carry the version `0.2.0-dev` until the release: 
 - **The `projectwright-board` plugin** (optional, in development): the tasks of the wiki in a pane beside the Claude Code chat, kept up to date as the wiki changes, with the detail of a task, a form to create one, an edit form and a button that brings a task into Claude's context. Every change made from the pane goes through Claude, with `/projectwright:manage-tasks` and the lint; the pane never writes the wiki. It is a Claude Code hooks module (mod), an early-access API; it is released together with `projectwright`, with the same version, and checks at every refresh that `projectwright` is there with that version. See `plugins/projectwright-board/README.md`.
 - **`wiki-query.py task <file name or ID>`**: one task in full — every frontmatter field, its body and the notes it links — as JSON (`--format json`), Markdown or a table.
 - **The title of each task** in the JSON of `wiki-query.py tasks` (the table and Markdown outputs, and the dashboard, are unchanged).
+- **The dashboard in JSON**: `wiki-query.py dashboard --format json` prints one object with the sections of the dashboard (blocking questions, other open questions, recent decisions, components, tasks in progress or blocked, cards to integrate, deviations, lint violations); before, it printed the text. The text and Markdown outputs are unchanged.
+- **`/projectwright:upgrade` and the board**: a board copied into the project (`.claude/skills/projectwright-board/`) is replaced with the board released beside the new version; with the plugins installed, the upgrade updates the board too.
 
 ### Upgrade notes
 

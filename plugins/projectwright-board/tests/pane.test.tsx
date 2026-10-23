@@ -1,4 +1,6 @@
-import { expect, test } from 'claude-code/testing'
+import { expect, mock, test } from 'claude-code/testing'
+
+import { touchesWiki } from '../hooks/paths'
 
 const PANE = {
   plugin: 'projectwright-board',
@@ -33,7 +35,7 @@ type Engine = {
   cwd?: string
   root?: string | null
   version?: string | null
-  tasks?: unknown[]
+  tasks?: unknown[] | (() => unknown[])
   pythons?: string[]
 }
 
@@ -46,6 +48,9 @@ const engine = (on: any, opts: Engine = {}) => {
   const sent: string[] = []
   const written: string[] = []
   const ran: string[][] = []
+  const clock = mock.clock(on)
+  on('turn.start', (_: unknown, e: any) => ({ turnId: e.turnId }))
+  on('turn.complete', (_: unknown, e: any) => ({ text: e.answer ?? '' }))
   on('command.register', () => ({ value: { command: 'board' } }))
   on('ui.open', () => ({ value: { isPlaced: true } }))
   on('ui.toast', () => ({ value: undefined }))
@@ -66,11 +71,12 @@ const engine = (on: any, opts: Engine = {}) => {
     const argv = [...e.argv] as string[]
     if (!pythons.includes(argv[0] ?? '')) throw new Error(`${argv[0]}: not found`)
     ran.push(argv)
-    const stdout = argv[2] === 'task' ? JSON.stringify(DETAIL) : JSON.stringify(opts.tasks ?? TASKS)
+    const tasks = typeof opts.tasks === 'function' ? opts.tasks() : opts.tasks ?? TASKS
+    const stdout = argv[2] === 'task' ? JSON.stringify(DETAIL) : JSON.stringify(tasks)
     return { value: { exitCode: 0, stdout, stderr: '' } }
   })
   on('prompt.submit', (_: unknown, e: any) => { sent.push(e.text); return { text: e.text } })
-  return { sent, written, ran }
+  return { sent, written, ran, clock }
 }
 
 const start = ($: any, cwd = '/project') => $.session.start({ cwd, surface: 'terminal', isInteractive: true })
@@ -214,3 +220,80 @@ test('the edit form sends only the changed fields to Claude, and writes nothing'
   expect(await ui.find({ type: 'Text', text: /Claude is applying your changes/ })).toBeDefined()
   await ui.unmount()
 })
+
+test('a write tells the wiki apart from the code, on Windows paths too', () => {
+  expect(touchesWiki('/project/wiki/tasks/T-WEB-0009-new.md', '/project')).toBe(true)
+  expect(touchesWiki('/project/project.yaml', '/project')).toBe(true)
+  expect(touchesWiki('/project/repositories/web/app.ts', '/project')).toBe(false)
+  expect(touchesWiki('/projects/other/wiki/x.md', '/project')).toBe(false)
+  // Windows: back slashes, a drive letter, and a case that does not matter
+  expect(touchesWiki('C:\\Work\\Shop\\wiki\\tasks\\T-WEB-0009-new.md', 'C:\\Work\\Shop')).toBe(true)
+  expect(touchesWiki('c:\\work\\shop\\wiki\\x.md', 'C:\\Work\\Shop\\')).toBe(true)
+  expect(touchesWiki('C:/Work/Shop/project.yaml', 'C:\\Work\\Shop')).toBe(true)
+  expect(touchesWiki('C:\\Work\\Shop\\repositories\\web\\app.ts', 'C:\\Work\\Shop')).toBe(false)
+  expect(touchesWiki('C:\\Work\\Shopping\\wiki\\x.md', 'C:\\Work\\Shop')).toBe(false)
+})
+
+test('a write of Claude in the wiki refreshes the pane, a write in the code does not', async ($, on) => {
+  const { ran } = engine(on)
+  on('tool.call', () => ({ result: {} }))
+  await start($)
+
+  const before = ran.length
+  await $.tool.call({ tool: 'Write', file_path: '/project/wiki/tasks/T-WEB-0009-new.md', content: 'x' })
+  expect(ran.length).toBe(before + 1)
+  await $.tool.call({ tool: 'Write', file_path: '/project/repositories/web/app.ts', content: 'x' })
+  expect(ran.length).toBe(before + 1)
+})
+
+test('a request Claude did not carry out is flagged when its turn ends, and can be dismissed', async ($, on) => {
+  const { sent } = engine(on)
+  await start($)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'open-form' })
+  await ui.input({ key: 'title', text: 'Order history', kind: 'change' })
+  await ui.press({ key: 'create' })
+  expect(sent.length).toBe(1)
+  expect(await ui.find({ type: 'Text', text: /Claude is adding “Order history”/ })).toBeDefined()
+
+  // Claude's turn on the request ends, and the task is not in the wiki
+  await $.turn.start({ text: sent[0] ?? '', turnId: 't1' })
+  await $.turn.complete({ turnId: 't1', reason: 'answer', answer: 'Which component?', durationMs: 900, isAborted: false })
+  expect(await ui.find({ type: 'Text', text: /“Order history” is not in the wiki yet: Claude may be waiting for you/ }))
+    .toBeDefined()
+
+  const row = await ui.find({ type: 'Text', text: /Order history/ })
+  expect(row).toBeDefined()
+  const dismiss = (await ui.find({ type: 'Button', text: /✕/ }))
+  expect(dismiss).toBeDefined()
+  await ui.press({ key: String((dismiss as any).key) })
+  expect(await ui.find({ type: 'Text', text: /Order history/ })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('while the pane is shown it looks at the wiki every 30 seconds, for changes made by hand', async ($, on) => {
+  let tasks: unknown[] = TASKS
+  on('ui.panes', () => ({ value: [{ id: 'projectwright-board', title: 'Board', isShown: true, isFocused: false }] }))
+  const { clock } = engine(on, { tasks: () => tasks })
+  await start($)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /DONE/ })).toBeUndefined()
+  // someone closes a task in an editor
+  tasks = TASKS.map(t => (t.task === '[[T-WEB-0001-checkout-page]]' ? { ...t, progress: 'done' } : t))
+  await clock.advance(30_000)
+  expect(await ui.find({ type: 'Text', text: /DONE/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('while the pane is not shown, the periodic look runs no script', async ($, on) => {
+  on('ui.panes', () => ({ value: [] }))
+  const { ran, clock } = engine(on)
+  await start($)
+
+  const before = ran.length
+  await clock.advance(90_000)
+  expect(ran.length).toBe(before)
+})
+

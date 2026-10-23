@@ -288,6 +288,8 @@ Each project records the version of the framework it was set up with (`framework
 3. **It keeps your changes.** Framework files you did not change take the new version; those you changed are merged with it, three-way; where both changed the same lines, it shows you the two versions with a proposal, and you decide.
 4. **It applies the upgrade notes** of each version — new settings to choose, changes to the notes translated into your language — then records the upgrade in an `ADR-MET`.
 
+The optional board follows: installed, the upgrade updates it together with `projectwright`; copied into the project (`.claude/skills/projectwright-board/`), it is replaced with the board of the new version.
+
 A colleague who installs the plugin later gets the latest version: the start-of-session check tells them when it is ahead of the project, so that the team can decide whether to upgrade.
 
 ---
