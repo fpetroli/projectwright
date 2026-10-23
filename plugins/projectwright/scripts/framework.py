@@ -4,8 +4,9 @@
 The lock file .claude/projectwright.lock.json records the framework version and a
 checksum of every file provided by the framework, as it was when the framework was
 applied: the framework part of the root CLAUDE.md (everything before "## Project-specific
-instructions"), the wiki constitution, wiki-sources/README.md, the git hooks and, when the
-plugin is copied into the project (.claude/skills/projectwright/), the whole plugin.
+instructions"), the wiki constitution, wiki-sources/README.md, the git hooks and, when they
+are copied into the project, the whole plugin (.claude/skills/projectwright/) and the whole
+board (.claude/skills/projectwright-board/, without the types Claude Code writes in it).
 
 The plugin is either installed for the project from the marketplace (the usual way: its
 files live in the plugin cache of Claude Code and cannot be changed per project) or
@@ -40,7 +41,10 @@ Usage (from the project root, or with --root):
                                          for the user; without conflicts it closes the upgrade (lock),
                                          otherwise `lock --from` closes it once they are resolved;
                                          a board copied into the project (.claude/skills/projectwright-board)
-                                         is replaced with the one beside the new version, when there is one
+                                         follows the plan like the plugin, against the one beside the new
+                                         version; a copy not yet tracked is replaced whole, and tracked
+    python3 framework.py lock --add .claude/skills/projectwright-board
+                                         after copying the board into the project: tracks its files
     python3 framework.py resolved <file> ...
                                          marks the conflicts of an upgrade as resolved
     python3 framework.py permissions [--remove]
@@ -104,25 +108,50 @@ def digest(rel, data):
     return "sha256:" + hashlib.sha256(framework_part(rel, data)).hexdigest()
 
 
-def plugin_files(root):
-    """The files of the copy of the plugin in the project (none when the plugin is installed)."""
-    base = Path(root) / PLUGIN_REL
+def tree_files(base):
+    """Paths relative to `base` of the files of a copied plugin: no caches, and for the board not the
+    types that Claude Code writes in .claude-plugin/types/ at every load."""
+    base = Path(base)
     out = []
     if not base.is_dir():
         return out
     for dirpath, dirnames, filenames in os.walk(base):
-        dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS)
+        rel_dir = pwlib.rel(base, Path(dirpath))
+        dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS
+                             and not (rel_dir == ".claude-plugin" and d == "types"))
         for name in sorted(filenames):
-            if name.endswith(".pyc"):
-                continue
-            out.append(pwlib.rel(root, Path(dirpath) / name))
+            if not name.endswith(".pyc"):
+                out.append(pwlib.rel(base, Path(dirpath) / name))
     return out
+
+
+def plugin_files(root):
+    """The files of the copy of the plugin in the project (none when the plugin is installed)."""
+    return [PLUGIN_REL + "/" + r for r in tree_files(Path(root) / PLUGIN_REL)]
+
+
+def board_tracked(root):
+    """Whether the copy of the board is in the lock: copies made before it was tracked are not."""
+    return any(r.startswith(BOARD_REL + "/") for r in ((read_lock(root) or {}).get("files") or {}))
+
+
+def board_files(root):
+    """The files of the copy of the board in the project, once it is tracked (or when no lock exists yet)."""
+    if read_lock(root) is not None and not board_tracked(root):
+        return []
+    return [BOARD_REL + "/" + r for r in tree_files(Path(root) / BOARD_REL)]
+
+
+def board_source(plugin_dir):
+    """The board released beside a version of projectwright (`<plugin>/../projectwright-board`), or None."""
+    src = Path(plugin_dir).parent / "projectwright-board"
+    return src if (src / ".claude-plugin" / "plugin.json").is_file() else None
 
 
 def current(root):
     """Relative path -> checksum, for the framework files present now."""
     files = {}
-    for rel in plugin_files(root) + [r for r in TEMPLATED if (Path(root) / r).is_file()]:
+    for rel in plugin_files(root) + board_files(root) + [r for r in TEMPLATED if (Path(root) / r).is_file()]:
         files[rel] = digest(rel, (Path(root) / rel).read_bytes())
     return files
 
@@ -156,11 +185,17 @@ def originals(root, source=None):
     out = {}
     if (root / PLUGIN_REL).is_dir():
         src = Path(source) if source else root / PLUGIN_REL
-        for dirpath, dirnames, filenames in os.walk(src):
-            dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS)
-            for name in sorted(filenames):
-                if not name.endswith(".pyc"):
-                    out[PLUGIN_REL + "/" + pwlib.rel(src, Path(dirpath) / name)] = (Path(dirpath) / name).read_bytes()
+        for r in tree_files(src):
+            out[PLUGIN_REL + "/" + r] = (src / r).read_bytes()
+    if (root / BOARD_REL).is_dir():
+        # the board copied into the project is tracked like the copy of the plugin. Its originals are
+        # the board released beside the version applied; when that version has none, the originals
+        # saved before (so that the project's changes stay changes), or the copy itself
+        saved = root / ORIGINAL_REL / BOARD_REL
+        src = (board_source(source) if source else root / BOARD_REL) or \
+              (saved if saved.is_dir() else root / BOARD_REL)
+        for r in tree_files(src):
+            out[BOARD_REL + "/" + r] = (src / r).read_bytes()
     tdir = Path(source) / "templates" if source else templates_dir(root)
     for rel, template in TEMPLATED.items():
         # only for the files the project has (the git hook exists only when the folder is versioned)
@@ -181,6 +216,7 @@ def cmd_lock(root, source=None):
     version = pwlib.plugin_version(source) if source else plugin_version(root)
     lock = {"framework": "projectwright", "version": version,
             "plugin": "in-project" if (Path(root) / PLUGIN_REL).is_dir() else "installed",
+            "board": "in-project" if (Path(root) / BOARD_REL).is_dir() else "installed or absent",
             "locked_on": datetime.date.today().isoformat(), "files": dict(sorted(files.items()))}
     path = Path(root) / LOCK_REL
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -207,7 +243,16 @@ def cmd_lock_add(root, files):
         return cmd_lock(root)
     base = Path(root) / ORIGINAL_REL
     for rel in files:
-        rel = rel.replace(os.sep, "/")
+        rel = rel.replace(os.sep, "/").rstrip("/")
+        if rel == BOARD_REL:  # the board just copied into the project: its files are the originals
+            for r in tree_files(Path(root) / BOARD_REL):
+                data = (Path(root) / BOARD_REL / r).read_bytes()
+                lock["files"][BOARD_REL + "/" + r] = digest(BOARD_REL + "/" + r, data)
+                dest = base / BOARD_REL / r
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_bytes(data)
+            lock["board"] = "in-project"
+            continue
         template = TEMPLATED.get(rel)
         if not template or not (templates_dir(root) / template).is_file():
             print("not a templated framework file: %s" % rel, file=sys.stderr)
@@ -238,7 +283,9 @@ def changes(root):
     locked, now = lock.get("files", {}), current(root)
     modified = sorted(r for r in now if r in locked and now[r] != locked[r])
     added = sorted(r for r in now if r not in locked)
-    removed = sorted(r for r in locked if r not in now)
+    # the board is optional: taking its copy away (to install it, or to drop it) is no change of the framework
+    board_gone = not (Path(root) / BOARD_REL).is_dir()
+    removed = sorted(r for r in locked if r not in now and not (board_gone and r.startswith(BOARD_REL + "/")))
     return modified, added, removed
 
 
@@ -360,20 +407,24 @@ def upgrade_sources(root, new_dir, base_plugin):
         if not base.is_file() and base_plugin:
             base = Path(base_plugin) / "templates" / template
         out[rel] = (new if new.is_file() else None, base if base.is_file() else None)
+    trees = []
     if (root / PLUGIN_REL).is_dir():
-        rels = {r for r in lock.get("files", {}) if r.startswith(PLUGIN_REL + "/")}
-        rels |= set(plugin_files(root))
-        for dirpath, dirnames, filenames in os.walk(new_dir):
-            dirnames[:] = sorted(x for x in dirnames if x not in SKIP_DIRS)
-            for name in filenames:
-                if not name.endswith(".pyc"):
-                    rels.add(PLUGIN_REL + "/" + pwlib.rel(new_dir, Path(dirpath) / name))
+        trees.append((PLUGIN_REL, new_dir, Path(base_plugin) if base_plugin else None))
+    new_board = board_source(new_dir)
+    if (root / BOARD_REL).is_dir() and board_tracked(root) and new_board:
+        # a tracked copy of the board follows the plan like the plugin; without a board beside the
+        # new version it stays as it is
+        trees.append((BOARD_REL, new_board, board_source(base_plugin) if base_plugin else None))
+    for prefix, new_tree, base_tree in trees:
+        rels = {r for r in lock.get("files", {}) if r.startswith(prefix + "/")}
+        rels |= {prefix + "/" + r for r in tree_files(root / prefix)}
+        rels |= {prefix + "/" + r for r in tree_files(new_tree)}
         for rel in sorted(rels):
-            inner = rel[len(PLUGIN_REL) + 1:]
-            new = new_dir / inner
+            inner = rel[len(prefix) + 1:]
+            new = new_tree / inner
             base = originals / rel
-            if not base.is_file() and base_plugin:
-                base = Path(base_plugin) / inner
+            if not base.is_file() and base_tree:
+                base = base_tree / inner
             out[rel] = (new if new.is_file() else None, base if base.is_file() else None)
     return out
 
@@ -425,32 +476,25 @@ def upgrade_plan(root, new_dir, base_plugin):
 
 
 def board_plan(root, new_dir):
-    """The board copied into the project follows the framework: it holds no changes of the
-    project (it is not a framework file and is not in the lock), so an upgrade replaces it
-    with the board released beside the new version (`<new>/../projectwright-board`).
-    Returns (action, detail, source): action "replace", "same", "keep" or None (no copy)."""
+    """The board copied into the project. A tracked copy (in the lock) follows the plan file by
+    file, like the copy of the plugin: what the project changed in it is kept and merged. A copy
+    made before the board was tracked is replaced whole, once, with the board released beside the
+    new version, and is tracked from then on.
+    Returns (action, detail, source): "tracked", "replace", "same", "keep", or None (no copy)."""
     copy = Path(root) / BOARD_REL
     if not copy.is_dir():
         return None, "", None
-    src = Path(new_dir).parent / "projectwright-board"
-    if not (src / ".claude-plugin" / "plugin.json").is_file():
+    src = board_source(new_dir)
+    if src is None:
         return "keep", "the new version has no projectwright-board beside it: the copy stays as it is", None
-
-    def files(base):
-        out = {}
-        for dirpath, dirnames, filenames in os.walk(base):
-            rel_dir = pwlib.rel(base, Path(dirpath))
-            dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS
-                                 and not (rel_dir == ".claude-plugin" and d == "types"))
-            for name in filenames:
-                out[pwlib.rel(base, Path(dirpath) / name)] = (Path(dirpath) / name).read_bytes()
-        return out
-
     old_v, new_v = pwlib.plugin_version(copy), pwlib.plugin_version(src)
-    if files(copy) == files(src):
-        return "same", "already the board of %s" % new_v, src
     note = "" if new_v == pwlib.plugin_version(new_dir) else " (its version differs from the framework's)"
-    return "replace", "board %s -> %s%s" % (old_v, new_v, note), src
+    if board_tracked(root):
+        return "tracked", "board %s -> %s%s: its files are in the plan above" % (old_v, new_v, note), src
+    files = lambda base: {r: (base / r).read_bytes() for r in tree_files(base)}
+    if files(copy) == files(src):
+        return "same", "already the board of %s; tracked from now on" % new_v, src
+    return "replace", "board %s -> %s%s; not tracked yet: replaced whole, tracked from now on" % (old_v, new_v, note), src
 
 
 def apply_board(root, src):

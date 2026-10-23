@@ -13,7 +13,7 @@ From `$ARGUMENTS` or by asking, in one grouped question:
 
 - **name** of the component: the folder name in `repositories/` (lower case, hyphens). It is **permanent** — the wiki folder and the entry note take it, and file names are never renamed;
 - **URL** of the git repository, if it exists (it can be added later: a component can be planned before its repository exists);
-- **code**: 2–8 capital letters, unique among the area codes and the other components (propose one from the name, for example `web-portal` → `WP`); it prefixes the ADRs, questions and tasks of the component;
+- **code**: 2–8 capital letters, unique among the area codes and the other components (propose one from the name, for example `web-portal` → `WP`); it prefixes the ADRs and questions of the component, and is the `area` of its tasks (whose IDs, `TASK-NNNN`, are numbered for the whole project);
 - one line on **what the component is**.
 
 Check in `project.yaml` that name, code and repository are not already used.

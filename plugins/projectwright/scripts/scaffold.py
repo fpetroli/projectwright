@@ -171,7 +171,10 @@ def cmd_project(args):
     if versioned:  # the project folder is versioned only when the user asks for it
         if not (root / ".git").exists():
             subprocess.run(["git", "init", "-q"], cwd=root, check=False)
-            print("git      initialised a repository for the project folder")
+            # the first branch is the project's main branch (git.main_branch), not git's default
+            branch = pwlib.get(pwlib.load_project(root), "git.main_branch") or "main"
+            subprocess.run(["git", "symbolic-ref", "HEAD", "refs/heads/%s" % branch], cwd=root, check=False)
+            print("git      initialised a repository for the project folder, on the branch %s" % branch)
         r = subprocess.run(["git", "config", "core.hooksPath", ".githooks"], cwd=root, check=False)
         if r.returncode == 0:
             print("git      hooks active (core.hooksPath = .githooks)")

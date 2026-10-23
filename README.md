@@ -235,6 +235,8 @@ All skills are invoked as `/projectwright:<name>`. You can also just ask in plai
 
 **The board beside the chat (in development)** — `projectwright-board` is an optional second plugin of this marketplace: the tasks of the wiki in a pane beside the Claude Code chat, in a Board or a List view, kept up to date as the wiki changes, with the detail of a task and forms to create and edit one. It shows the same columns, cards and detail as `board.html`. Every change made from the pane goes through Claude, which applies it with `/projectwright:manage-tasks` and the lint: the pane never writes the wiki. It needs `projectwright` of the same version and does not install it; install it with `claude plugin install projectwright-board@projectwright --scope project`, then type `/board`. It is built on an early-access API of Claude Code, and a session followed through Remote Control does not show the pane: use `/board` or `board.html` there. Details in [`plugins/projectwright-board/README.md`](plugins/projectwright-board/README.md).
 
+**When the skills do not appear** — in a folder trusted for the first time, Claude Code may run the hooks of a plugin copied into the project but not list its skills yet (`/projectwright:…` is then an unknown command): run `/reload-plugins`, or start a new session.
+
 **Scripts** — in the `scripts/` folder of the plugin (its path is in `.claude/.projectwright-plugin` after the first session), plain Python with no dependencies to install. Claude and the hooks use them; you can too:
 
 | Script | What it does |
@@ -271,7 +273,7 @@ Every project can adapt the method to itself: a rule of the constitution, the fr
 python3 "<plugin folder>/scripts/framework.py" vendor
 ```
 
-It copies the running plugin into `.claude/skills/projectwright/`, removes the installed one from the project's `.claude/settings.json` (an installed plugin enabled for the project would take precedence over the copy) and takes a new fingerprint. From then on the project uses its own copy; Claude can do it for you when you ask to change a skill.
+It copies the running plugin into `.claude/skills/projectwright/`, removes the installed one from the project's `.claude/settings.json` (an installed plugin enabled for the project would take precedence over the copy) and takes a new fingerprint. From then on the project uses its own copy — run `/reload-plugins` so that the session loads it; Claude can do it for you when you ask to change a skill.
 
 The framework keeps track of every change:
 
@@ -290,7 +292,7 @@ Each project records the version of the framework it was set up with (`framework
 3. **It keeps your changes.** Framework files you did not change take the new version; those you changed are merged with it, three-way; where both changed the same lines, it shows you the two versions with a proposal, and you decide.
 4. **It applies the upgrade notes** of each version — new settings to choose, changes to the notes translated into your language — then records the upgrade in an `ADR-MET`.
 
-The optional board follows: installed, the upgrade updates it together with `projectwright`; copied into the project (`.claude/skills/projectwright-board/`), it is replaced with the board of the new version.
+The optional board follows: installed, the upgrade updates it together with `projectwright`; copied into the project (`.claude/skills/projectwright-board/`), it is tracked like the copied plugin: what the project changes in it is a deviation, kept and merged by the upgrade, and can be proposed back with `/projectwright:propose-improvement`.
 
 A colleague who installs the plugin later gets the latest version: the start-of-session check tells them when it is ahead of the project, so that the team can decide whether to upgrade.
 

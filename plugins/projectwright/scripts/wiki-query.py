@@ -272,6 +272,36 @@ def cmd_deviations(root, project, args):
 C_COLS = [("component", link), ("code", "code"), ("status", "component_status")]
 
 
+P_COLS = [("proposal", "id"), ("kind", "kind"), ("task", "task"), ("summary", "summary")]
+R_COLS = [("reminder", "text"), ("due", "due")]
+REMINDERS_AHEAD = 3  # days: the reminders due within them reach the dashboard
+
+
+def own_script(name, filename):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(name, pwlib.SCRIPTS_DIR / filename)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def waiting_for_user(root):
+    """The proposals of Claude still to decide, and the reminders overdue or due soon (outside the wiki)."""
+    try:
+        proposals = own_script("proposals_mod", "proposals.py").listed(root, "open,revising")
+    except Exception:
+        proposals = []
+    try:
+        reminders = own_script("reminders_mod", "reminders.py").listed(root)
+    except Exception:
+        reminders = []
+    import datetime
+    horizon = (datetime.date.today() + datetime.timedelta(days=REMINDERS_AHEAD)).isoformat()
+    open_reminders = [r for r in reminders if not r.get("done_on")]
+    due = [r for r in open_reminders if r.get("due") and r["due"] <= horizon]
+    return proposals, due, len(open_reminders) - len(due)
+
+
 def dashboard_sections(root, project):
     """What the dashboard shows, as records: one place for the text and for the JSON."""
     recs = records(root, project)
@@ -310,7 +340,9 @@ def dashboard_sections(root, project):
         lint = len(lint_mod.lint(root, project, pwlib.load_schema()))
     except Exception:
         lint = None
+    proposals, due, other_reminders = waiting_for_user(root)
     return {"name": pwlib.get(project, "project.name") or Path(root).name,
+            "proposals": proposals, "reminders_due": due, "other_reminders": other_reminders,
             "blocking": blocking, "others": len(open_q) - len(blocking),
             "decisions": decisions[:RECENT_DECISIONS], "components": comps, "tasks": tasks,
             "pending": [r for r in read_log(root) if r.get("integrated") == "no"],
@@ -332,6 +364,9 @@ def dashboard_data(root, project):
         "pending_cards": plain_rows(d["pending"], S_COLS),
         "deviations": d["deviations"],
         "lint_violations": d["lint"],
+        "proposals_to_decide": plain_rows(d["proposals"], P_COLS),
+        "reminders_due": plain_rows(d["reminders_due"], R_COLS),
+        "other_open_reminders": d["other_reminders"],
     }
 
 
@@ -356,6 +391,14 @@ def cmd_dashboard(root, project, args):
     if d["tasks"] is not None:
         out.append(render(d["tasks"], T_COLS, fmt, "Tasks in progress or blocked"))
     out.append(render(d["pending"], S_COLS, fmt, "Cards not yet integrated"))
+    # What waits for the user, outside the wiki: shown only when there is some.
+    if d["proposals"]:
+        out.append(render(d["proposals"], P_COLS, fmt, "Proposals of Claude still to decide (the ids are for the tools: "
+                                                         "never show them to the user, never propose these again)"))
+    if d["reminders_due"]:
+        out.append(render(d["reminders_due"], R_COLS, fmt, "Reminders of the user overdue or due within %d days" % REMINDERS_AHEAD))
+    if d["other_reminders"]:
+        out.append(("%d more open reminder(s): `reminders.py list`\n" if fmt == "md" else "%d more open reminder(s)") % d["other_reminders"])
     devs = d["deviations"]
     if devs:
         msg = "Framework files changed in this project: %d (%d without an ADR); deviations not yet proposed: %d" % (

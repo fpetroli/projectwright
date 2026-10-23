@@ -35,6 +35,9 @@ Reading the wiki, check what a script cannot judge:
 5. **One fact, one place**: the same substantial fact repeated in several notes instead of written in one and linked from the others; pairs of notes on very close topics that may overlap.
 6. **Ageing assumptions**: notes and questions with status `assumed` whose `updated` date is old — a debt to bring to the user.
 7. **Development standards vs decisions**: rules in the references of the development skills (`dev_skills` in `project.yaml`) that contradict an ADR still `decided`.
+8. **Tasks not consolidated** (constitution, principle 14): tasks `done` or `cancelled` that still have a **Log** and no **Outcome**, or whose log holds knowledge of lasting value that no note of their component carries.
+9. **Decisions hidden in a task**: lines of the log of an open task that state a decision or an open question with no ADR or question file — they do not wait for the task to close.
+10. **Ids that are not the wiki's**: ids of the proposals (`P-…`) or of the reminders (`R-…`) cited in the wiki — they are for the tools, and their files are personal and never versioned.
 
 ## 4. Report
 

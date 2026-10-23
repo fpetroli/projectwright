@@ -18,7 +18,7 @@ or, at the prompt of a session, `/plugin install projectwright-board@projectwrig
 
 Installing the board does not install `projectwright`: install it first, or keep the copy the project has in `.claude/skills/projectwright/`. This is on purpose: a project that copies projectwright to adapt it must keep running its own copy, and an installed `projectwright` would take its place.
 
-A project that copies projectwright can copy the board too, into `.claude/skills/projectwright-board/`: Claude Code loads it from there, and `/projectwright:upgrade` replaces it with the board of the new version. The copy is not meant to be changed: to adapt the board, change it in this repository.
+A project that copies projectwright can copy the board too, into `.claude/skills/projectwright-board/`, add it to the lock (`python3 "<projectwright>/scripts/framework.py" lock --add .claude/skills/projectwright-board`) and run `/reload-plugins`: Claude Code loads it from there. The copy is tracked like the copied `projectwright`: a change the project makes to it is a deviation, kept and merged by `/projectwright:upgrade` with the board of the new version, and can be proposed back with `/projectwright:propose-improvement`. Colors, columns and the fields of the cards are in `board-model.json` of projectwright, for both boards.
 
 Requirements: a version of Claude Code with hooks modules (mods); Python ≥ 3.11, as for `projectwright` (`python3`, or `python` where only that name exists).
 

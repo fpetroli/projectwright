@@ -50,7 +50,7 @@ Compare the novelties with the **claims of the cards** in `wiki-sources/` (read-
 
 ## 6. Deviations from the framework
 
-The files provided by the framework are the plugin when it is copied into the project (`.claude/skills/projectwright/`; an installed plugin is never changed per project), the framework part of the root `CLAUDE.md` (everything before its "Project-specific instructions" section), the constitution `wiki/README.md`, `wiki-sources/README.md` and `.githooks/`. Check them mechanically:
+The files provided by the framework are the plugin and the board when they are copied into the project (`.claude/skills/projectwright/`, `.claude/skills/projectwright-board/`; an installed plugin is never changed per project), the framework part of the root `CLAUDE.md` (everything before its "Project-specific instructions" section), the constitution `wiki/README.md`, `wiki-sources/README.md` and `.githooks/`. Check them mechanically:
 
 ```
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/wiki-query.py" deviations

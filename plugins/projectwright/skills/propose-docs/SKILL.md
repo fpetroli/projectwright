@@ -54,5 +54,5 @@ For each proposal, **one at a time**:
 Summary for the user:
 
 1. documents **created** and **updated**, where they were saved and the knowledge promoted (wikilinks);
-2. the **reminder that closes the loop**: put the documents in the shared documentation space and **run `/projectwright:ingest-sources` again** — re-ingestion will update cards and log, and the wiki ↔ documents cycle is aligned again without ping-pong;
+2. the **reminder that closes the loop**: put the documents in the shared documentation space and **run `/projectwright:ingest-sources` again** — re-ingestion will update cards and log, and the wiki ↔ documents cycle is aligned again without ping-pong. It is the user's to do: propose it as a reminder too (`python3 "${CLAUDE_PLUGIN_ROOT}/scripts/proposals.py" add`, `kind: remind`, one item per document), so that it waits in the boards;
 3. any clusters **not promoted** because not yet `decided` (useful to know: they are the candidates of the next round).

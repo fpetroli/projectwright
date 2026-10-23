@@ -1,6 +1,6 @@
 ---
 name: manage-tasks
-description: Manages the tasks of the project when the wiki is the tracker (tasks.mode = wiki) — creates tasks, moves them between todo, in progress, blocked, done and cancelled, assigns them, sets priority and phase (sprint), links them to decisions, questions and blocking tasks, and lists them. The board (board.html) shows the result. Use when the user asks to create, update, move, assign, close or list tasks, or to plan a sprint.
+description: Manages the tasks of the project when the wiki is the tracker (tasks.mode = wiki) — creates tasks, moves them between todo, in progress, blocked, done and cancelled, assigns them, sets priority and phase (sprint), links them to decisions, questions and blocking tasks, and lists them; applies or revises the proposals of Claude on the tasks, and keeps the user's reminders (things to keep in mind that are not tasks). The boards — board.html and the pane beside the chat — show the result. Use when the user asks to create, update, move, assign, close or list tasks, to plan a sprint, to answer a proposal, or to be reminded of something ("remind me to…").
 ---
 
 # Manage the tasks
@@ -49,4 +49,4 @@ Rules:
 
 ## Closing
 
-The lint runs after every write: fix what it reports. Summarise the tasks created or changed, remind the user that `board.html` is up to date (open it in the browser), and, if the project folder is versioned, give the ready-to-paste git commands for it (commits and pushes are run by the user).
+The lint runs after every write: fix what it reports. Summarise the tasks and reminders created or changed, and the proposals written; say that the boards show them — the pane beside the chat at once, `board.html` in the browser — and, if the project folder is versioned, give the ready-to-paste git commands for it (commits and pushes are run by the user).

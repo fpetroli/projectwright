@@ -7,7 +7,7 @@ The plugin of the projectwright framework: a project wiki as the AI's memory, th
 
 ## Set up a project
 
-1. From the project folder: `claude plugin marketplace add fpetroli/projectwright --scope project`, then `claude plugin install projectwright@projectwright --scope project`. (Or copy this folder into the project as `.claude/skills/projectwright/`.)
+1. From the project folder: `claude plugin marketplace add fpetroli/projectwright --scope project`, then `claude plugin install projectwright@projectwright --scope project`. (Or copy this folder into the project as `.claude/skills/projectwright/`: after trusting the folder, run `/reload-plugins` once — in a folder trusted for the first time Claude Code may run the plugin's hooks before it lists its skills.)
 2. Start Claude Code **in the project folder** and trust it; if the `/projectwright:…` skills are not there yet, run `/reload-plugins`.
 3. Run `/projectwright:setup-project`: a short interview, then the wiki, `project.yaml`, the dashboard and the root `CLAUDE.md`.
 4. Add the code repositories with `/projectwright:add-repository`.
