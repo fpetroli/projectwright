@@ -52,11 +52,12 @@ Usage (from the project root, or with --root):
                                          asking: allow rules for those only, in .claude/settings.local.json
                                          (personal, never versioned); the start-of-session check keeps
                                          them up to date when the plugin moves (a new version)
-    python3 framework.py renumber-tasks [--apply]
+    python3 framework.py renumber-tasks [--plan | --apply]
                                          tasks numbered once for the whole project: the tasks still
                                          named T-<CODE>-NNNN become TASK-NNNN (in order of creation),
                                          with their file names, every mention in wiki/ and in the
-                                         proposals and reminders; without --apply it prints the plan
+                                         proposals and reminders; --plan (the default) only prints
+                                         the plan and writes nothing, --apply applies it
     python3 framework.py check [--hook]  start-of-session check: the plugin that runs is the one the
                                          project expects (version, copy in the project); records the
                                          plugin path for the git hook (.claude/.projectwright-plugin)
@@ -204,6 +205,17 @@ def originals(root, source=None):
     return out
 
 
+def board_state(root):
+    """How the project has the board: copied into it, installed for it, or not at all."""
+    if (Path(root) / BOARD_REL).is_dir():
+        return "in-project"
+    try:
+        enabled = read_settings(root)[1].get("enabledPlugins") or {}
+    except ValueError:
+        enabled = {}
+    return "installed" if enabled.get("projectwright-board@projectwright") else "absent"
+
+
 def cmd_lock(root, source=None):
     pending = pending_conflicts(root)
     if pending:
@@ -216,7 +228,7 @@ def cmd_lock(root, source=None):
     version = pwlib.plugin_version(source) if source else plugin_version(root)
     lock = {"framework": "projectwright", "version": version,
             "plugin": "in-project" if (Path(root) / PLUGIN_REL).is_dir() else "installed",
-            "board": "in-project" if (Path(root) / BOARD_REL).is_dir() else "installed or absent",
+            "board": board_state(root),
             "locked_on": datetime.date.today().isoformat(), "files": dict(sorted(files.items()))}
     path = Path(root) / LOCK_REL
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -840,6 +852,7 @@ def main():
     ap.add_argument("--from", dest="source", help="with upgrade and lock: folder of the new version of the plugin")
     ap.add_argument("--base-plugin", help="with upgrade: folder of the current version, when the original copy is missing")
     ap.add_argument("--apply", action="store_true", help="with upgrade and renumber-tasks: apply the plan")
+    ap.add_argument("--plan", action="store_true", help="with renumber-tasks: only print the plan, write nothing (the default)")
     ap.add_argument("--remove", action="store_true", help="with permissions: remove the rules")
     ap.add_argument("--root")
     args = ap.parse_args()

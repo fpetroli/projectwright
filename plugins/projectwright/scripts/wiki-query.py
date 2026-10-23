@@ -329,7 +329,7 @@ def dashboard_sections(root, project):
     try:
         files, adrs, uncovered = deviations(root, project)
         devs = {"files": len(files), "without_adr": len(uncovered),
-                "not_proposed": len([r for r in adrs if not r.get("upstream")])} if files else None
+                "not_proposed": len([r for r in adrs if not r.get("upstream") and r.get("status") != "superseded"])} if files else None
     except Exception:
         devs = None
     try:
