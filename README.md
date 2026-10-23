@@ -14,7 +14,7 @@ When you work with an AI assistant on a real project, every session starts from 
 
 The method is a Claude Code **plugin**, distributed by this repository as a plugin marketplace: you install it for your project, set the project up with it, and upgrade it when you decide. If you need to change the method itself, you can copy the plugin into your project and adapt it there, with every change tracked.
 
-> **Early version (0.x).** The core works — setup, ingestion of documents, recording of decisions, automatic checks, dashboard, task board. Still to come: integration with external trackers. It has been tested on Linux only so far.
+> **Early version (0.x).** The core works — setup, ingestion of documents, recording of decisions, automatic checks, dashboard, task board. Still to come: integration with external trackers. It has been tested on Linux and macOS; not yet on Windows.
 
 ---
 
@@ -233,7 +233,7 @@ All skills are invoked as `/projectwright:<name>`. You can also just ask in plai
 
 **The board** — `board.html`, in the project folder, is a read-only view of the tasks of the wiki to open in your browser, laid out like a database: a **Board** view (the pipeline in columns: in progress, blocked, to do, done) and a **Table** view (one row per task, grouped by progress), a search, and the detail of a task beside the list. It works offline, changes nothing and is never versioned. With `/projectwright:manage-tasks` it replaces an external tracker. **The tasks are decided together**: you and Claude both propose them, and Claude never creates, moves, closes or re-prioritises a task on its own — it proposes, and writes after your yes. The proposals wait outside the wiki, and the board beside the chat shows them, to accept, reject or comment. Next to the tasks, both boards keep your **reminders** — "send the e-mail", "update X" — a checklist with an optional date, outside the wiki too: you add them, or Claude proposes them. It shows what the pane beside the chat shows (below), from the same definition.
 
-**The board beside the chat (in development)** — `projectwright-board` is an optional second plugin of this marketplace: the tasks of the wiki in a pane beside the Claude Code chat, in a Board or a List view, kept up to date as the wiki changes, with the detail of a task and forms to create and edit one. It shows the same columns, cards and detail as `board.html`. Every change made from the pane goes through Claude, which applies it with `/projectwright:manage-tasks` and the lint: the pane never writes the wiki. It needs `projectwright` of the same version and does not install it; install it with `claude plugin install projectwright-board@projectwright --scope project`, then type `/board`. It is built on an early-access API of Claude Code, and a session followed through Remote Control does not show the pane: use `/board` or `board.html` there. Details in [`plugins/projectwright-board/README.md`](plugins/projectwright-board/README.md).
+**The board beside the chat** — `projectwright-board` is an optional second plugin of this marketplace: the tasks of the wiki in a pane beside the Claude Code chat, in a Board or a List view, kept up to date as the wiki changes, with the detail of a task and forms to create and edit one. It shows the same columns, cards and detail as `board.html`. Every change made from the pane goes through Claude, which applies it with `/projectwright:manage-tasks` and the lint: the pane never writes the wiki. It needs `projectwright` of the same version and does not install it; install it with `claude plugin install projectwright-board@projectwright --scope project`, then type `/board`. It is built on an early-access API of Claude Code, and a session followed through Remote Control does not show the pane: use `/board` or `board.html` there. Details in [`plugins/projectwright-board/README.md`](plugins/projectwright-board/README.md).
 
 **When the skills do not appear** — in a folder trusted for the first time, Claude Code may run the hooks of a plugin copied into the project but not list its skills yet (`/projectwright:…` is then an unknown command): run `/reload-plugins`, or start a new session.
 
@@ -304,7 +304,7 @@ A colleague who installs the plugin later gets the latest version: the start-of-
 |---|---|
 | `.claude-plugin/marketplace.json` | Makes this repository a Claude Code plugin marketplace, listing the `projectwright` and `projectwright-board` plugins |
 | `plugins/projectwright/` | The plugin: skills, hooks, scripts, schema, templates |
-| `plugins/projectwright-board/` | The optional board beside the chat, in development (see below) |
+| `plugins/projectwright-board/` | The optional board beside the chat (see below) |
 | `plugins/projectwright/CHANGELOG.md` | Changes by version, with the upgrade notes for an existing project |
 
 To try a change to the plugin before publishing it, add your local clone as a marketplace (`claude plugin marketplace add ./projectwright --scope project` from a test project): a plugin from a local marketplace is loaded straight from its folder, so your edits apply at the next `/reload-plugins`. `claude plugin validate .` checks the marketplace and the plugin manifests.

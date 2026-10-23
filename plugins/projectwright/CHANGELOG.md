@@ -2,13 +2,11 @@
 
 All notable changes to the projectwright framework are recorded here. Versions follow [semantic versioning](https://semver.org/): a **major** version changes the data schema (folders, fields, IDs) in an incompatible way, a **minor** version adds compatible features, a **patch** fixes errors. Every entry that touches the method ends with its **upgrade notes**: what `/projectwright:upgrade` cannot do by merging files — new configuration, changes to the notes translated into the project language, data.
 
-## [Unreleased] — 0.2.0 in development
-
-The plugins of the marketplace carry the version `0.2.0-dev` until the release: what follows can still change.
+## [0.2.0] — 2026-10-24
 
 ### Added
 
-- **The `projectwright-board` plugin** (optional, in development): the tasks of the wiki in a pane beside the Claude Code chat, kept up to date as the wiki changes, with the detail of a task, a form to create one, an edit form and a button that brings a task into Claude's context. Every change made from the pane goes through Claude, with `/projectwright:manage-tasks` and the lint; the pane never writes the wiki. It is a Claude Code hooks module (mod), an early-access API; it is released together with `projectwright`, with the same version, and checks at every refresh that `projectwright` is there with that version. See `plugins/projectwright-board/README.md`.
+- **The `projectwright-board` plugin** (optional): the tasks of the wiki in a pane beside the Claude Code chat, kept up to date as the wiki changes, with the detail of a task, a form to create one, an edit form and a button that brings a task into Claude's context. Every change made from the pane goes through Claude, with `/projectwright:manage-tasks` and the lint; the pane never writes the wiki. It is a Claude Code hooks module (mod), an early-access API; it is released together with `projectwright`, with the same version, and checks at every refresh that `projectwright` is there with that version. See `plugins/projectwright-board/README.md`.
 - **`wiki-query.py task <file name or ID>`**: one task in full — every frontmatter field, its body and the notes it links — as JSON (`--format json`), Markdown or a table.
 - **The title of each task** in the JSON of `wiki-query.py tasks` (the table and Markdown outputs, and the dashboard, are unchanged).
 - **The dashboard in JSON**: `wiki-query.py dashboard --format json` prints one object with the sections of the dashboard (blocking questions, other open questions, recent decisions, components, tasks in progress or blocked, cards to integrate, deviations, lint violations); before, it printed the text. The text and Markdown outputs are unchanged.

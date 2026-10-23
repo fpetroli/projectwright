@@ -2,8 +2,6 @@
 
 An optional plugin of the projectwright framework: the tasks of the project wiki in a pane beside the Claude Code chat, kept up to date as the wiki changes. It adds to `board.html` and to the hooks of the `projectwright` plugin; it replaces neither.
 
-> **In development** — this is the `0.2.0-dev` version, not a release yet: what it shows and how it looks can still change.
-
 It is a Claude Code **mod**: a TypeScript hooks module that runs inside Claude Code. The logic stays in the `projectwright` scripts: the board only draws what `wiki-query.py` answers.
 
 ## Install
