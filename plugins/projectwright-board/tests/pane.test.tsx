@@ -48,7 +48,7 @@ type Engine = {
 // project at `root` whose projectwright plugin is in /plugin.
 const engine = (on: any, opts: Engine = {}) => {
   const root = opts.root === undefined ? '/project' : opts.root
-  const version = opts.version === undefined ? '0.2.0' : opts.version
+  const version = opts.version === undefined ? '0.3.0-dev' : opts.version
   const pythons = opts.pythons ?? ['python3', 'python']
   const sent: string[] = []
   const written: string[] = []
@@ -68,7 +68,7 @@ const engine = (on: any, opts: Engine = {}) => {
   on('fs.read', (_: unknown, e: any) => {
     if (e.path.endsWith('/.projectwright-plugin')) return { value: '/plugin\n' }
     if (e.path === '/plugin/.claude-plugin/plugin.json') return { value: JSON.stringify({ version }) }
-    if (e.path.endsWith('/.claude-plugin/plugin.json')) return { value: JSON.stringify({ version: '0.2.0' }) }
+    if (e.path.endsWith('/.claude-plugin/plugin.json')) return { value: JSON.stringify({ version: '0.3.0-dev' }) }
     if (e.path === '/plugin/assets/board-model.json') {
       if (opts.model === null) throw new Error('ENOENT: no such file')
       return { value: opts.model ?? JSON.stringify(MODEL) }
@@ -151,6 +151,8 @@ test('the proposals of Claude are drawn above the columns, and only when there a
   expect(await ui.find({ type: 'Text', text: /Proposed by Claude 2/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: 'Address book' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^Why: Asked at every checkout\.$/ })).toBeDefined()
+  // the task of a proposal by its id and its title
+  expect(await ui.find({ type: 'Text', text: /TASK-0001 Checkout page/ })).toBeDefined()
   for (const key of ['accept-P-0001', 'reject-P-0001', 'comment-open-P-0001', 'accept-P-0002']) {
     expect(await ui.find({ key })).toBeDefined()
   }
@@ -430,7 +432,7 @@ test('without the projectwright plugin, or with another version of it, the pane 
   await start($)
 
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-  expect(await ui.find({ type: 'Text', text: /needs projectwright 0\.2\.0; found 0\.1\.0/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /needs projectwright 0\.3\.0-dev; found 0\.1\.0/ })).toBeDefined()
   await ui.unmount()
 })
 

@@ -815,6 +815,8 @@ export const register: Register = on => {
     const KIND: Record<string, string> = {
       create: 'NEW TASK', move: 'MOVE', close: 'CLOSE', cancel: 'CANCEL', split: 'SPLIT', edit: 'EDIT', remind: 'REMINDER',
     }
+    // The task of a proposal by its id and title, the one on the board when it is there.
+    const titleOf = (task: string) => split(tasks.find(t => name(t) === task) ?? { task } as Task).title
     const proposal = (p: Proposal) => {
       const sent = accepted.find(a => a.id === p.id)
       // A proposal of one item that says what its summary says draws it once, with its date.
@@ -825,7 +827,7 @@ export const register: Register = on => {
         <Box key={`proposal-${p.id}`} flexDirection="column" borderStyle="single" borderColor="claude" paddingX={1}>
           <Text wrap="wrap">
             <Text bold color="claude">{KIND[p.kind] ?? p.kind.toUpperCase()}</Text>
-            {p.task && <Text dimColor>  {idOf(p.task)}</Text>}
+            {p.task && <Text dimColor>  {idOf(p.task)} {titleOf(p.task)}</Text>}
           </Text>
           <Text bold wrap="wrap">
             {p.summary}{single?.due && <Text dimColor>  by {day(single.due)}</Text>}

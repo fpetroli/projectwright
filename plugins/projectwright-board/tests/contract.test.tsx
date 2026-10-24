@@ -34,7 +34,7 @@ const engine = (on: any) => {
   on('fs.exists', () => ({ value: true }))
   on('fs.read', (_: unknown, e: any) => ({
     value: e.path.endsWith('/.projectwright-plugin') ? '/plugin\n'
-      : e.path === '/plugin/assets/board-model.json' ? JSON.stringify(MODEL) : JSON.stringify({ version: '0.2.0' }),
+      : e.path === '/plugin/assets/board-model.json' ? JSON.stringify(MODEL) : JSON.stringify({ version: '0.3.0-dev' }),
   }))
   on('process.run', (_: unknown, e: any) => {
     const argv = [...e.argv] as string[]

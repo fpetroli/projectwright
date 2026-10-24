@@ -8,6 +8,7 @@ All notable changes to the projectwright framework are recorded here. Versions f
 
 - **`/projectwright:upgrade` from a development version**: when the project is at a `-dev` version, the upgrade says that the CHANGELOG entry of the version it goes to also lists what the project already has, and describes what really changes from the plan of the files.
 - **`/projectwright:upgrade` and its temporary folder**: when deleting the clone of the new version is refused, the upgrade gives the user the command to delete it.
+- **The pane names the task of a proposal by its title too** (`TASK-0008 Release 0.2.0`), not only by its id.
 
 ### Upgrade notes
 
