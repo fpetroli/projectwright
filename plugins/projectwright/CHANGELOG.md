@@ -2,6 +2,17 @@
 
 All notable changes to the projectwright framework are recorded here. Versions follow [semantic versioning](https://semver.org/): a **major** version changes the data schema (folders, fields, IDs) in an incompatible way, a **minor** version adds compatible features, a **patch** fixes errors. Every entry that touches the method ends with its **upgrade notes**: what `/projectwright:upgrade` cannot do by merging files — new configuration, changes to the notes translated into the project language, data.
 
+## [Unreleased]
+
+### Changed
+
+- **`/projectwright:upgrade` from a development version**: when the project is at a `-dev` version, the upgrade says that the CHANGELOG entry of the version it goes to also lists what the project already has, and describes what really changes from the plan of the files.
+- **`/projectwright:upgrade` and its temporary folder**: when deleting the clone of the new version is refused, the upgrade gives the user the command to delete it.
+
+### Upgrade notes
+
+- Nothing to configure, no data to convert.
+
 ## [0.2.0] — 2026-10-24
 
 ### Added
