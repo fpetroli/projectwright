@@ -294,7 +294,7 @@ Each project records the version of the framework it was set up with (`framework
 
 The optional board follows: installed, the upgrade updates it together with `projectwright`; copied into the project (`.claude/skills/projectwright-board/`), it is tracked like the copied plugin: what the project changes in it is a deviation, kept and merged by the upgrade, and can be proposed back with `/projectwright:propose-improvement`.
 
-A colleague who installs the plugin later gets the latest version: the start-of-session check tells them when it is ahead of the project, so that the team can decide whether to upgrade.
+A colleague who installs the plugin later gets the latest released version: the start-of-session check tells them when it is ahead of the project, so that the team can decide whether to upgrade.
 
 ---
 
@@ -306,6 +306,8 @@ A colleague who installs the plugin later gets the latest version: the start-of-
 | `plugins/projectwright/` | The plugin: skills, hooks, scripts, schema, templates |
 | `plugins/projectwright-board/` | The optional board beside the chat (see below) |
 | `plugins/projectwright/CHANGELOG.md` | Changes by version, with the upgrade notes for an existing project |
+
+**Branches.** `main` holds only released versions, each with its tag (`v0.2.0`): it is what the marketplace installs, so users always get a stable version. Development happens on `dev`, with `-dev` versions; at a release `dev` is merged into `main` and the release is tagged.
 
 To try a change to the plugin before publishing it, add your local clone as a marketplace (`claude plugin marketplace add ./projectwright --scope project` from a test project): a plugin from a local marketplace is loaded straight from its folder, so your edits apply at the next `/reload-plugins`. `claude plugin validate .` checks the marketplace and the plugin manifests.
 
